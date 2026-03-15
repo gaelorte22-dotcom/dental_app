@@ -19,6 +19,7 @@ from license_manager import verify_license
 from activation_screen import ActivationScreen
 from theme import theme, get_palette, app_stylesheet
 from notificaciones import ReminderManager
+from updater import verificar_actualizacion
 
 _FRASES = [
     "Que tengas un increíble turno 🦷✨",
@@ -220,8 +221,14 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(900, 600)
         self._build_ui()
         self._setup_reminders()
+        # Verificar actualizaciones 5 segundos después de abrir
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(5000, lambda: self._check_updates())
         theme.connect(self._apply_theme)
         self._apply_theme()
+
+    def _check_updates(self):
+        self._updater = verificar_actualizacion(self, silencioso=True)
 
     def _build_ui(self):
         central = QWidget()
@@ -264,6 +271,22 @@ class MainWindow(QMainWindow):
 
         self.theme_btn = ThemeToggleButton()
         sb.addWidget(self.theme_btn)
+
+        # Buscar actualizaciones
+        self.update_btn = QPushButton("  🔄  Actualizaciones")
+        self.update_btn.setFixedHeight(42)
+        self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_btn.setFont(QFont("Segoe UI", 11))
+        self.update_btn.clicked.connect(lambda: verificar_actualizacion(self, silencioso=False))
+        self.update_btn.setStyleSheet(f"""
+            QPushButton {{
+                background:transparent; color:#8892A4;
+                border:none; border-radius:8px;
+                text-align:left; padding-left:14px;
+            }}
+            QPushButton:hover {{ color:white; background:rgba(255,255,255,0.08); }}
+        """)
+        sb.addWidget(self.update_btn)
 
         self.ver_lbl = QLabel("v1.0.0")
         self.ver_lbl.setFont(QFont("Segoe UI", 10))
