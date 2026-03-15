@@ -1,0 +1,153 @@
+name: Build DentalApp
+
+on:
+  push:
+    tags:
+      - 'v*'  # Se activa cuando subes un tag como v1.0.1, v1.1.0, etc.
+
+jobs:
+
+  # ── Build Windows ────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6 reportlab plyer pyinstaller
+
+      - name: Compilar .exe
+        run: |
+          pyinstaller `
+            --onefile `
+            --windowed `
+            --name="DentalApp" `
+            --icon="diente.ico" `
+            --add-data="database;database" `
+            --add-data="modules;modules" `
+            --add-data="theme.py;." `
+            --add-data="notificaciones.py;." `
+            --add-data="license_manager.py;." `
+            --add-data="activation_screen.py;." `
+            --add-data="diente.ico;." `
+            --hidden-import="reportlab" `
+            --hidden-import="reportlab.lib" `
+            --hidden-import="reportlab.platypus" `
+            --hidden-import="reportlab.lib.styles" `
+            --hidden-import="reportlab.lib.units" `
+            --hidden-import="reportlab.lib.colors" `
+            --hidden-import="plyer" `
+            --hidden-import="plyer.platforms.win.notification" `
+            --hidden-import="sqlite3" `
+            main.py
+
+      - name: Subir .exe como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: DentalApp-Windows
+          path: dist/DentalApp.exe
+
+  # ── Build Mac ────────────────────────────────────────────────────────────────
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyQt6 reportlab plyer pyinstaller
+
+      - name: Compilar .app
+        run: |
+          pyinstaller \
+            --onefile \
+            --windowed \
+            --name="DentalApp" \
+            --icon="diente.ico" \
+            --add-data="database:database" \
+            --add-data="modules:modules" \
+            --add-data="theme.py:." \
+            --add-data="notificaciones.py:." \
+            --add-data="license_manager.py:." \
+            --add-data="activation_screen.py:." \
+            --add-data="diente.ico:." \
+            --hidden-import="reportlab" \
+            --hidden-import="reportlab.lib" \
+            --hidden-import="reportlab.platypus" \
+            --hidden-import="reportlab.lib.styles" \
+            --hidden-import="reportlab.lib.units" \
+            --hidden-import="reportlab.lib.colors" \
+            --hidden-import="plyer" \
+            --hidden-import="plyer.platforms.macosx.notification" \
+            --hidden-import="sqlite3" \
+            main.py
+
+      - name: Comprimir .app en zip
+        run: |
+          cd dist
+          zip -r DentalApp-Mac.zip DentalApp
+
+      - name: Subir .app como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: DentalApp-Mac
+          path: dist/DentalApp-Mac.zip
+
+  # ── Crear Release automático ─────────────────────────────────────────────────
+  release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Descargar artefacto Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: DentalApp-Windows
+          path: artifacts/windows
+
+      - name: Descargar artefacto Mac
+        uses: actions/download-artifact@v4
+        with:
+          name: DentalApp-Mac
+          path: artifacts/mac
+
+      - name: Crear Release en GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "DentalApp ${{ github.ref_name }}"
+          body: |
+            ## 🦷 DentalApp ${{ github.ref_name }}
+            
+            ### Descargas
+            - **Windows:** `DentalApp.exe`
+            - **Mac:** `DentalApp-Mac.zip` → descomprimir y abrir
+            
+            ### Instalación Windows
+            Descarga `DentalApp.exe` y ejecuta el instalador.
+            
+            ### Instalación Mac
+            1. Descarga `DentalApp-Mac.zip`
+            2. Descomprime
+            3. Arrastra `DentalApp` a tu carpeta Aplicaciones
+            4. Click derecho → Abrir (primera vez)
+          files: |
+            artifacts/windows/DentalApp.exe
+            artifacts/mac/DentalApp-Mac.zip
+          draft: false
+          prerelease: false
