@@ -151,7 +151,7 @@ class HomeWidget(QWidget):
         root.addLayout(grid)
         root.addStretch()
 
-        self.footer = QLabel("DentalApp v1.0.7  —  Sistema de Gestión Odontológica")
+        self.footer = QLabel("DentalApp v1.0.8  —  Sistema de Gestión Odontológica")
         self.footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(self.footer)
 
