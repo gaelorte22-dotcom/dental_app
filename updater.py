@@ -23,7 +23,7 @@ from PyQt6.QtGui import QFont
 # ── Configuración ─────────────────────────────────────────────────────────────
 GITHUB_USER = "gaelorte22-dotcom"
 GITHUB_REPO = "dental_app"
-VERSION_ACTUAL = "1.0.8"
+VERSION_ACTUAL = "1.0.9"
 GITHUB_TOKEN = "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"
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
 
