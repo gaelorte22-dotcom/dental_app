@@ -151,7 +151,7 @@ class HomeWidget(QWidget):
         root.addLayout(grid)
         root.addStretch()
 
-        self.footer = QLabel("DentalApp v1.1.4  —  Sistema de Gestión Odontológica")
+        self.footer = QLabel("DentalApp v1.1.5  —  Sistema de Gestión Odontológica")
         self.footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(self.footer)
 
@@ -288,7 +288,7 @@ class MainWindow(QMainWindow):
         """)
         sb.addWidget(self.update_btn)
 
-        self.ver_lbl = QLabel("v1.1.4")
+        self.ver_lbl = QLabel("v1.1.5")
         self.ver_lbl.setFont(QFont("Segoe UI", 10))
         self.ver_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sb.addWidget(self.ver_lbl)
