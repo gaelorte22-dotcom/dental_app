@@ -31,3 +31,4 @@ Thumbs.db
 # IDEs
 .idea/
 .vscode/
+license_manager.py
