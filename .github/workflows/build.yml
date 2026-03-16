@@ -35,7 +35,6 @@ jobs:
             --add-data="modules;modules" `
             --add-data="theme.py;." `
             --add-data="notificaciones.py;." `
-            --add-data="license_manager.py;." `
             --add-data="activation_screen.py;." `
             --add-data="diente.ico;." `
             --hidden-import="reportlab" `
@@ -83,7 +82,6 @@ jobs:
             --add-data="modules:modules" \
             --add-data="theme.py:." \
             --add-data="notificaciones.py:." \
-            --add-data="license_manager.py:." \
             --add-data="activation_screen.py:." \
             --add-data="diente.ico:." \
             --hidden-import="reportlab" \
