@@ -39,6 +39,7 @@ jobs:
             --add-data="notificaciones.py;." `
             --add-data="license_manager.py;." `
             --add-data="activation_screen.py;." `
+            --add-data="updater.py;." `
             --add-data="diente.ico;." `
             --hidden-import="reportlab" `
             --hidden-import="reportlab.lib" `
@@ -51,6 +52,9 @@ jobs:
             --hidden-import="sqlite3" `
             --hidden-import="license_manager" `
             --hidden-import="activation_screen" `
+            --hidden-import="updater" `
+            --hidden-import="theme" `
+            --hidden-import="notificaciones" `
             main.py
 
       - name: Subir .exe como artefacto
@@ -91,6 +95,7 @@ jobs:
             --add-data="notificaciones.py:." \
             --add-data="license_manager.py:." \
             --add-data="activation_screen.py:." \
+            --add-data="updater.py:." \
             --add-data="diente.ico:." \
             --hidden-import="reportlab" \
             --hidden-import="reportlab.lib" \
@@ -103,6 +108,9 @@ jobs:
             --hidden-import="sqlite3" \
             --hidden-import="license_manager" \
             --hidden-import="activation_screen" \
+            --hidden-import="updater" \
+            --hidden-import="theme" \
+            --hidden-import="notificaciones" \
             main.py
 
       - name: Comprimir .app en zip
