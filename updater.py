@@ -23,8 +23,8 @@ from PyQt6.QtGui import QFont
 # ── Configuración ─────────────────────────────────────────────────────────────
 GITHUB_USER = "gaelorte22-dotcom"
 GITHUB_REPO = "dental_app"
-VERSION_ACTUAL = "1.0.6"
-
+VERSION_ACTUAL = "1.0.7"
+GITHUB_TOKEN = "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"
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
 
 PRIMARY  = "#1A6B8A"
@@ -61,19 +61,37 @@ def _version_mayor(v1: str, v2: str) -> bool:
         return False
 
 
+# ── Signal bridge para comunicación entre hilos ───────────────────────────────
+from PyQt6.QtCore import QObject, pyqtSignal as _Signal
+
+class _Bridge(QObject):
+    update_signal     = _Signal(dict)
+    sin_update_signal = _Signal()
+    error_signal      = _Signal(str)
+
 # ── Worker thread para revisar actualizaciones ────────────────────────────────
 class UpdateChecker:
     def __init__(self):
-        self._callbacks = {"update": [], "sin_update": [], "error": []}
+        self._bridge = _Bridge()
+        self._bridge.update_signal.connect(self._on_update)
+        self._bridge.sin_update_signal.connect(self._on_sin_update)
+        self._bridge.error_signal.connect(self._on_error)
+        self._cb_update     = []
+        self._cb_sin_update = []
+        self._cb_error      = []
 
-    def on_update(self, fn):   self._callbacks["update"].append(fn)
-    def on_sin_update(self, fn): self._callbacks["sin_update"].append(fn)
-    def on_error(self, fn):    self._callbacks["error"].append(fn)
+    def on_update(self, fn):     self._cb_update.append(fn)
+    def on_sin_update(self, fn): self._cb_sin_update.append(fn)
+    def on_error(self, fn):      self._cb_error.append(fn)
 
-    def _emit(self, key, *args):
-        from PyQt6.QtCore import QTimer
-        for fn in self._callbacks[key]:
-            QTimer.singleShot(0, lambda f=fn, a=args: f(*a))
+    def _on_update(self, info):
+        for fn in self._cb_update: fn(info)
+
+    def _on_sin_update(self):
+        for fn in self._cb_sin_update: fn()
+
+    def _on_error(self, msg):
+        for fn in self._cb_error: fn(msg)
 
     def start(self):
         t = threading.Thread(target=self._run, daemon=True)
@@ -81,14 +99,19 @@ class UpdateChecker:
 
     def _run(self):
         try:
+            print(f"[Updater] Verificando actualizaciones... URL: {API_URL}")
             req = urllib.request.Request(
                 API_URL,
-                headers={"User-Agent": "DentalApp-Updater"}
+                headers={
+                    "User-Agent": "DentalApp-Updater",
+                    "Authorization": f"Bearer {GITHUB_TOKEN}"
+                }
             )
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode())
 
             version_nueva = data.get("tag_name", "").lstrip("v")
+            print(f"[Updater] Versión actual: {VERSION_ACTUAL} | Versión nueva: {version_nueva}")
             if _version_mayor(version_nueva, VERSION_ACTUAL):
                 assets = data.get("assets", [])
                 asset_url = None; asset_name = None
@@ -104,7 +127,7 @@ class UpdateChecker:
                             asset_url = a["browser_download_url"]
                             asset_name = a["name"]; break
 
-                self._emit("update", {
+                self._bridge.update_signal.emit({
                     "version":    version_nueva,
                     "notas":      data.get("body", ""),
                     "asset_url":  asset_url,
@@ -112,29 +135,37 @@ class UpdateChecker:
                     "fecha":      data.get("published_at", "")[:10],
                 })
             else:
-                self._emit("sin_update")
+                self._bridge.sin_update_signal.emit()
 
-        except urllib.error.URLError:
-            self._emit("error", "Sin conexión a internet")
+        except urllib.error.URLError as e:
+            print(f"[Updater] Sin conexión: {e}")
+            self._bridge.error_signal.emit("Sin conexión a internet")
         except Exception as e:
-            self._emit("error", str(e))
+            print(f"[Updater] Error: {e}")
+            self._bridge.error_signal.emit(str(e))
 
 
 # ── Worker thread para descargar ──────────────────────────────────────────────
+class _DownloaderBridge(QObject):
+    progreso_signal   = _Signal(int)
+    completado_signal = _Signal(str)
+    error_signal      = _Signal(str)
+
 class Downloader:
     def __init__(self, url: str, nombre: str):
         self.url    = url
         self.nombre = nombre
-        self._callbacks = {"progreso": [], "completado": [], "error": []}
+        self._bridge = _DownloaderBridge()
+        self._cb_progreso   = []
+        self._cb_completado = []
+        self._cb_error      = []
+        self._bridge.progreso_signal.connect(lambda v: [fn(v) for fn in self._cb_progreso])
+        self._bridge.completado_signal.connect(lambda v: [fn(v) for fn in self._cb_completado])
+        self._bridge.error_signal.connect(lambda v: [fn(v) for fn in self._cb_error])
 
-    def on_progreso(self, fn):   self._callbacks["progreso"].append(fn)
-    def on_completado(self, fn): self._callbacks["completado"].append(fn)
-    def on_error(self, fn):      self._callbacks["error"].append(fn)
-
-    def _emit(self, key, *args):
-        from PyQt6.QtCore import QTimer
-        for fn in self._callbacks[key]:
-            QTimer.singleShot(0, lambda f=fn, a=args: f(*a))
+    def on_progreso(self, fn):   self._cb_progreso.append(fn)
+    def on_completado(self, fn): self._cb_completado.append(fn)
+    def on_error(self, fn):      self._cb_error.append(fn)
 
     def start(self):
         t = threading.Thread(target=self._run, daemon=True)
@@ -143,6 +174,27 @@ class Downloader:
     def _run(self):
         try:
             dest = os.path.join(os.path.expanduser("~"), "Downloads", self.nombre)
+            req  = urllib.request.Request(
+                self.url,
+                headers={"User-Agent": "DentalApp-Updater"}
+            )
+            with urllib.request.urlopen(req) as resp:
+                total = int(resp.headers.get("Content-Length", 0))
+                descargado = 0
+                with open(dest, "wb") as f:
+                    while True:
+                        data = resp.read(8192)
+                        if not data: break
+                        f.write(data)
+                        descargado += len(data)
+                        if total:
+                            self._bridge.progreso_signal.emit(int(descargado * 100 / total))
+
+            self._bridge.progreso_signal.emit(100)
+            self._bridge.completado_signal.emit(dest)
+
+        except Exception as e:
+            self._bridge.error_signal.emit(str(e))
             req  = urllib.request.Request(
                 self.url,
                 headers={"User-Agent": "DentalApp-Updater"}
@@ -322,6 +374,7 @@ def verificar_actualizacion(parent=None, silencioso=True):
     checker = UpdateChecker()
 
     def on_update(info):
+        print(f"[Updater] ¡Actualización encontrada! Mostrando popup...")
         dlg = UpdateDialog(info, parent)
         dlg.exec()
 
