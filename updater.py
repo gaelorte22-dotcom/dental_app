@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QProgressBar, QWidget
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 
 # ── Configuración ─────────────────────────────────────────────────────────────
@@ -62,12 +62,24 @@ def _version_mayor(v1: str, v2: str) -> bool:
 
 
 # ── Worker thread para revisar actualizaciones ────────────────────────────────
-class UpdateChecker(QThread):
-    update_disponible = pyqtSignal(dict)  # info del release
-    sin_actualizacion = pyqtSignal()
-    error             = pyqtSignal(str)
+class UpdateChecker:
+    def __init__(self):
+        self._callbacks = {"update": [], "sin_update": [], "error": []}
 
-    def run(self):
+    def on_update(self, fn):   self._callbacks["update"].append(fn)
+    def on_sin_update(self, fn): self._callbacks["sin_update"].append(fn)
+    def on_error(self, fn):    self._callbacks["error"].append(fn)
+
+    def _emit(self, key, *args):
+        from PyQt6.QtCore import QTimer
+        for fn in self._callbacks[key]:
+            QTimer.singleShot(0, lambda f=fn, a=args: f(*a))
+
+    def start(self):
+        t = threading.Thread(target=self._run, daemon=True)
+        t.start()
+
+    def _run(self):
         try:
             req = urllib.request.Request(
                 API_URL,
@@ -78,25 +90,21 @@ class UpdateChecker(QThread):
 
             version_nueva = data.get("tag_name", "").lstrip("v")
             if _version_mayor(version_nueva, VERSION_ACTUAL):
-                # Buscar el archivo correcto para esta plataforma
                 assets = data.get("assets", [])
-                asset_url = None
-                asset_name = None
+                asset_url = None; asset_name = None
 
                 if sys.platform == "win32":
                     for a in assets:
                         if a["name"].endswith(".exe"):
-                            asset_url  = a["browser_download_url"]
-                            asset_name = a["name"]
-                            break
+                            asset_url = a["browser_download_url"]
+                            asset_name = a["name"]; break
                 elif sys.platform == "darwin":
                     for a in assets:
                         if "Mac" in a["name"] and a["name"].endswith(".zip"):
-                            asset_url  = a["browser_download_url"]
-                            asset_name = a["name"]
-                            break
+                            asset_url = a["browser_download_url"]
+                            asset_name = a["name"]; break
 
-                self.update_disponible.emit({
+                self._emit("update", {
                     "version":    version_nueva,
                     "notas":      data.get("body", ""),
                     "asset_url":  asset_url,
@@ -104,26 +112,35 @@ class UpdateChecker(QThread):
                     "fecha":      data.get("published_at", "")[:10],
                 })
             else:
-                self.sin_actualizacion.emit()
+                self._emit("sin_update")
 
         except urllib.error.URLError:
-            self.error.emit("Sin conexión a internet")
+            self._emit("error", "Sin conexión a internet")
         except Exception as e:
-            self.error.emit(str(e))
+            self._emit("error", str(e))
 
 
 # ── Worker thread para descargar ──────────────────────────────────────────────
-class Downloader(QThread):
-    progreso   = pyqtSignal(int)   # 0-100
-    completado = pyqtSignal(str)   # ruta del archivo descargado
-    error      = pyqtSignal(str)
-
+class Downloader:
     def __init__(self, url: str, nombre: str):
-        super().__init__()
         self.url    = url
         self.nombre = nombre
+        self._callbacks = {"progreso": [], "completado": [], "error": []}
 
-    def run(self):
+    def on_progreso(self, fn):   self._callbacks["progreso"].append(fn)
+    def on_completado(self, fn): self._callbacks["completado"].append(fn)
+    def on_error(self, fn):      self._callbacks["error"].append(fn)
+
+    def _emit(self, key, *args):
+        from PyQt6.QtCore import QTimer
+        for fn in self._callbacks[key]:
+            QTimer.singleShot(0, lambda f=fn, a=args: f(*a))
+
+    def start(self):
+        t = threading.Thread(target=self._run, daemon=True)
+        t.start()
+
+    def _run(self):
         try:
             dest = os.path.join(os.path.expanduser("~"), "Downloads", self.nombre)
             req  = urllib.request.Request(
@@ -133,22 +150,20 @@ class Downloader(QThread):
             with urllib.request.urlopen(req) as resp:
                 total = int(resp.headers.get("Content-Length", 0))
                 descargado = 0
-                chunk = 8192
                 with open(dest, "wb") as f:
                     while True:
-                        data = resp.read(chunk)
-                        if not data:
-                            break
+                        data = resp.read(8192)
+                        if not data: break
                         f.write(data)
                         descargado += len(data)
                         if total:
-                            self.progreso.emit(int(descargado * 100 / total))
+                            self._emit("progreso", int(descargado * 100 / total))
 
-            self.progreso.emit(100)
-            self.completado.emit(dest)
+            self._emit("progreso", 100)
+            self._emit("completado", dest)
 
         except Exception as e:
-            self.error.emit(str(e))
+            self._emit("error", str(e))
 
 
 # ── Dialog de actualización ───────────────────────────────────────────────────
@@ -246,7 +261,6 @@ class UpdateDialog(QDialog):
 
     def _descargar(self):
         if not self.info.get("asset_url"):
-            # Sin URL directa — abrir GitHub en el navegador
             import webbrowser
             webbrowser.open(f"https://github.com/{GITHUB_USER}/{GITHUB_REPO}/releases/latest")
             self.accept()
@@ -259,9 +273,9 @@ class UpdateDialog(QDialog):
         self.status_lbl.setText("Iniciando descarga…")
 
         self._downloader = Downloader(self.info["asset_url"], self.info["asset_name"])
-        self._downloader.progreso.connect(self._on_progreso)
-        self._downloader.completado.connect(self._on_completado)
-        self._downloader.error.connect(self._on_error)
+        self._downloader.on_progreso(self._on_progreso)
+        self._downloader.on_completado(self._on_completado)
+        self._downloader.on_error(self._on_error)
         self._downloader.start()
 
     def _on_progreso(self, val):
@@ -324,14 +338,14 @@ def verificar_actualizacion(parent=None, silencioso=True):
         if not silencioso:
             from PyQt6.QtWidgets import QMessageBox
             m = QMessageBox(parent)
-            m.setWindowTitle("Error")
+            m.setWindowTitle("Sin conexión")
             m.setText(f"No se pudo verificar actualizaciones:\n{msg}")
             m.setStyleSheet("color:black; background:white;")
             m.exec()
 
-    checker.update_disponible.connect(on_update)
-    checker.sin_actualizacion.connect(on_sin_update)
-    checker.error.connect(on_error)
+    checker.on_update(on_update)
+    checker.on_sin_update(on_sin_update)
+    checker.on_error(on_error)
     checker.start()
 
-    return checker  # Guardar referencia para que no se destruya
+    return checker
