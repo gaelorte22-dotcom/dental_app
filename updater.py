@@ -103,8 +103,7 @@ class UpdateChecker:
                 API_URL,
                 headers={"User-Agent": "DentalApp-Updater"}
             )
-                }
-            )
+                
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode())
 
