@@ -23,8 +23,7 @@ from PyQt6.QtGui import QFont
 # ── Configuración ─────────────────────────────────────────────────────────────
 GITHUB_USER = "gaelorte22-dotcom"
 GITHUB_REPO = "dental_app"
-VERSION_ACTUAL = "1.0.9"
-GITHUB_TOKEN = "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"
+VERSION_ACTUAL = "1.1.0"
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
 
 PRIMARY  = "#1A6B8A"
@@ -102,9 +101,8 @@ class UpdateChecker:
             print(f"[Updater] Verificando actualizaciones... URL: {API_URL}")
             req = urllib.request.Request(
                 API_URL,
-                headers={
-                    "User-Agent": "DentalApp-Updater",
-                    "Authorization": f"Bearer {GITHUB_TOKEN}"
+                headers={"User-Agent": "DentalApp-Updater"}
+            )
                 }
             )
             with urllib.request.urlopen(req, timeout=8) as resp:
