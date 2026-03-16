@@ -2,7 +2,18 @@ import sqlite3
 import os
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "dental_clinic.db")
+# Carpeta persistente en AppData (Windows) o ~/.dentalapp (Mac/Linux)
+def _get_app_data_dir():
+    if os.name == 'nt':  # Windows
+        base = os.environ.get('APPDATA', os.path.expanduser('~'))
+    else:  # Mac / Linux
+        base = os.path.expanduser('~')
+    app_dir = os.path.join(base, 'DentalApp')
+    os.makedirs(app_dir, exist_ok=True)
+    return app_dir
+
+APP_DATA_DIR = _get_app_data_dir()
+DB_PATH = os.path.join(APP_DATA_DIR, "dental_clinic.db")
 
 
 def get_connection():

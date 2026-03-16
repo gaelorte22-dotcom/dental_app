@@ -53,7 +53,16 @@ ESTADOS_DIENTE = {
     "fractura":   ("#E67E22", "Fractura"),
 }
 
-ARCHIVOS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "archivos_pacientes")
+def _get_app_data_dir():
+    if os.name == 'nt':
+        base = os.environ.get('APPDATA', os.path.expanduser('~'))
+    else:
+        base = os.path.expanduser('~')
+    app_dir = os.path.join(base, 'DentalApp')
+    os.makedirs(app_dir, exist_ok=True)
+    return app_dir
+
+ARCHIVOS_DIR = os.path.join(_get_app_data_dir(), "archivos_pacientes")
 os.makedirs(ARCHIVOS_DIR, exist_ok=True)
 
 
