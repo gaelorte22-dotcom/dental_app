@@ -1,1 +1,33 @@
+# Herramientas privadas del vendedor
 generate_license.py
+
+# Base de datos (datos reales de clientes/pacientes)
+dental_clinic.db
+*.db
+
+# Licencias
+license.key
+*.key
+
+# Archivos de pacientes (radiografías, fotos)
+archivos_pacientes/
+
+# PyInstaller
+dist/
+build/
+*.spec
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+*.log
+
+# IDEs
+.idea/
+.vscode/
