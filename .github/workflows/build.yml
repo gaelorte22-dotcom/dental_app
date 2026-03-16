@@ -25,6 +25,8 @@ jobs:
           pip install PyQt6 reportlab plyer pyinstaller
 
       - name: Compilar .exe
+        env:
+          APP_SECRET: ${{ secrets.APP_SECRET }}
         run: |
           pyinstaller `
             --onefile `
@@ -35,6 +37,7 @@ jobs:
             --add-data="modules;modules" `
             --add-data="theme.py;." `
             --add-data="notificaciones.py;." `
+            --add-data="license_manager.py;." `
             --add-data="activation_screen.py;." `
             --add-data="diente.ico;." `
             --hidden-import="reportlab" `
@@ -46,6 +49,8 @@ jobs:
             --hidden-import="plyer" `
             --hidden-import="plyer.platforms.win.notification" `
             --hidden-import="sqlite3" `
+            --hidden-import="license_manager" `
+            --hidden-import="activation_screen" `
             main.py
 
       - name: Subir .exe como artefacto
@@ -72,6 +77,8 @@ jobs:
           pip install PyQt6 reportlab plyer pyinstaller
 
       - name: Compilar .app
+        env:
+          APP_SECRET: ${{ secrets.APP_SECRET }}
         run: |
           pyinstaller \
             --onefile \
@@ -82,6 +89,7 @@ jobs:
             --add-data="modules:modules" \
             --add-data="theme.py:." \
             --add-data="notificaciones.py:." \
+            --add-data="license_manager.py:." \
             --add-data="activation_screen.py:." \
             --add-data="diente.ico:." \
             --hidden-import="reportlab" \
@@ -93,6 +101,8 @@ jobs:
             --hidden-import="plyer" \
             --hidden-import="plyer.platforms.macosx.notification" \
             --hidden-import="sqlite3" \
+            --hidden-import="license_manager" \
+            --hidden-import="activation_screen" \
             main.py
 
       - name: Comprimir .app en zip
