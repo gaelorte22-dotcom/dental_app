@@ -22,7 +22,7 @@ from database.db_manager import get_connection
 
 # ── DB helper ─────────────────────────────────────────────────────────────────
 def get_citas_proximas(minutos_antes=60) -> list:
-    """Citas que empiezan en los próximos `minutos_antes` minutos y están pendientes/confirmadas."""
+
     conn = get_connection()
     cur  = conn.cursor()
     hoy  = date.today().strftime("%Y-%m-%d")
@@ -55,7 +55,7 @@ def get_citas_proximas(minutos_antes=60) -> list:
 
 # ── Windows toast notification ────────────────────────────────────────────────
 def notificar_windows(titulo: str, mensaje: str):
-    """Envía notificación nativa de Windows usando plyer o win10toast."""
+
     try:
         from plyer import notification
         notification.notify(

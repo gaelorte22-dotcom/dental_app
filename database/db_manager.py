@@ -176,6 +176,25 @@ def init_db():
             fecha TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
         );
+
+        CREATE TABLE IF NOT EXISTS turnos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id INTEGER,
+            fecha TEXT NOT NULL,
+            hora_inicio TEXT NOT NULL,
+            hora_fin TEXT,
+            numero_turno INTEGER DEFAULT 1,
+            total_efectivo REAL DEFAULT 0,
+            total_tarjeta REAL DEFAULT 0,
+            total_transferencia REAL DEFAULT 0,
+            total_credito REAL DEFAULT 0,
+            total_general REAL DEFAULT 0,
+            num_cobros INTEGER DEFAULT 0,
+            num_cancelados INTEGER DEFAULT 0,
+            estado TEXT DEFAULT 'abierto',
+            notas TEXT,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+        );
     """)
 
     conn.commit()

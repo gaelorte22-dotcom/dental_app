@@ -40,10 +40,11 @@ METODOS = ["Efectivo", "Tarjeta", "Transferencia", "Crédito"]
 ESTADOS = {"pagado": SUCCESS, "pendiente": WARNING, "parcial": SECONDARY}
 
 
-def _btn(label, color, hover, text_color="white", w=None):
+def _btn(label, color, hover, text_color="white", w=None, h=None):
     b = QPushButton(label)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     if w: b.setFixedWidth(w)
+    if h: b.setFixedHeight(h)
     b.setStyleSheet(f"""
         QPushButton {{
             background:{color}; color:{text_color};
@@ -179,11 +180,13 @@ def obtener_abonos(pago_id: int) -> list:
 
 
 def registrar_bitacora(usuario_id: int, accion: str, detalle: str):
+    from datetime import datetime as _dt
+    fecha_local = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = get_connection()
     conn.execute("""
-        INSERT INTO bitacora (usuario_id, accion, detalle)
-        VALUES (?,?,?)
-    """, (usuario_id, accion, detalle))
+        INSERT INTO bitacora (usuario_id, accion, detalle, fecha)
+        VALUES (?,?,?,?)
+    """, (usuario_id, accion, detalle, fecha_local))
     conn.commit()
     conn.close()
 
@@ -201,7 +204,18 @@ def obtener_bitacora() -> list:
     return rows
 
 
+def _get_turno_activo_id() -> str:
+    """Retorna el número de turno activo o 'Sin turno'."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT numero_turno FROM turnos WHERE estado='abierto' ORDER BY id DESC LIMIT 1")
+    row = cur.fetchone()
+    conn.close()
+    return f"Turno #{row[0]}" if row else "Sin turno"
+
+
 def eliminar_pago(pago_id: int, usuario_id: int, detalle: str):
+    turno_info = _get_turno_activo_id()
     conn = get_connection()
     conn.execute("DELETE FROM abonos WHERE pago_id=?", (pago_id,))
     conn.execute("DELETE FROM cuotas WHERE plan_id IN (SELECT id FROM plan_pagos WHERE pago_id=?)", (pago_id,))
@@ -209,7 +223,7 @@ def eliminar_pago(pago_id: int, usuario_id: int, detalle: str):
     conn.execute("DELETE FROM pagos WHERE id=?", (pago_id,))
     conn.commit()
     conn.close()
-    registrar_bitacora(usuario_id, "ELIMINAR_COBRO", detalle)
+    registrar_bitacora(usuario_id, "ELIMINAR_COBRO", f"[{turno_info}] {detalle}")
 
 
 # ── New payment dialog ────────────────────────────────────────────────────────
@@ -562,7 +576,10 @@ class DetallePagoDialog(QDialog):
 # ── Corte tab (lógica inline, sin importar CorteWidget) ──────────────────────
 import hashlib as _hashlib
 from modules.corte import (calcular_corte, guardar_corte,
-                            exportar_pdf, init_admin, login)
+                            exportar_pdf, init_admin, login,
+                            turno_activo, iniciar_turno, calcular_turno,
+                            cerrar_turno, historial_turnos,
+                            obtener_bitacora_completa, registrar_en_bitacora)
 from modules.plan_pagos import (CalculadoraPlanDialog, DetallePlanWidget,
                                  crear_plan, obtener_cuotas_proximas)
 
@@ -1079,9 +1096,33 @@ class FacturacionWidget(QWidget):
         ll.addWidget(lock_lbl)
         layout.addWidget(self._corte_locked)
 
-        # Content
+        # Content con subtabs
         self._corte_content = QWidget(); self._corte_content.setVisible(False)
-        cl = QVBoxLayout(self._corte_content); cl.setSpacing(12)
+        cl = QVBoxLayout(self._corte_content); cl.setSpacing(0); cl.setContentsMargins(0,0,0,0)
+
+        self._corte_subtabs = QTabWidget()
+        self._corte_subtabs.setStyleSheet(f"""
+            QTabWidget::pane {{ border:none; background:{BG}; }}
+            QTabBar::tab {{
+                background:#ECF0F1; color:{MUTED};
+                padding:7px 16px; font-size:12px; font-weight:600;
+                border-radius:0; margin-right:2px;
+            }}
+            QTabBar::tab:selected {{ background:{BG}; color:{PRIMARY}; border-bottom:3px solid {PRIMARY}; }}
+            QTabBar::tab:hover {{ color:{TEXT}; }}
+        """)
+        self._corte_subtabs.addTab(self._build_corte_diario(), "📊  Corte Diario")
+        self._corte_subtabs.addTab(self._build_turnos_tab(),   "🔄  Turnos")
+        self._corte_subtabs.addTab(self._build_bitacora_tab(), "📋  Bitácora")
+        cl.addWidget(self._corte_subtabs)
+
+        layout.addWidget(self._corte_content)
+        return w
+
+    def _build_corte_diario(self):
+        """Subtab del corte diario — igual que antes."""
+        w = QWidget(); w.setStyleSheet(f"background:{BG};")
+        cl = QVBoxLayout(w); cl.setContentsMargins(12,12,12,12); cl.setSpacing(12)
 
         date_row = QHBoxLayout()
         date_lbl = QLabel("Fecha:"); date_lbl.setStyleSheet(f"color:{TEXT}; font-weight:600;")
@@ -1095,13 +1136,11 @@ class FacturacionWidget(QWidget):
         date_row.addWidget(calc_btn); date_row.addStretch()
         cl.addLayout(date_row)
 
-        # Cards grid
         self._corte_cards = QWidget()
         self._corte_cards_layout = QGridLayout(self._corte_cards)
         self._corte_cards_layout.setSpacing(10)
         cl.addWidget(self._corte_cards)
 
-        # Comparativo
         comp_lbl = QLabel("📈  Comparativo últimos 7 días")
         comp_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         comp_lbl.setStyleSheet(f"color:{PRIMARY};")
@@ -1123,7 +1162,6 @@ class FacturacionWidget(QWidget):
         """)
         cl.addWidget(self._corte_comp_table)
 
-        # Notas + botones
         notas_lbl = QLabel("Notas:"); notas_lbl.setStyleSheet(f"color:{TEXT}; font-weight:600;")
         cl.addWidget(notas_lbl)
         self._corte_notas = QTextEdit()
@@ -1139,8 +1177,113 @@ class FacturacionWidget(QWidget):
         pdf_btn.clicked.connect(self._corte_pdf)
         act_row.addWidget(guardar_btn); act_row.addWidget(pdf_btn); act_row.addStretch()
         cl.addLayout(act_row)
+        return w
 
-        layout.addWidget(self._corte_content)
+    def _build_turnos_tab(self):
+        """Subtab de gestión de turnos."""
+        w = QWidget(); w.setStyleSheet(f"background:{BG};")
+        lay = QVBoxLayout(w); lay.setContentsMargins(12,12,12,12); lay.setSpacing(12)
+
+        # Turno activo card
+        self._turno_activo_frame = QFrame()
+        self._turno_activo_frame.setStyleSheet(f"""
+            QFrame {{
+                background:#E8F5E9; border-radius:10px;
+                border:2px solid {SUCCESS};
+            }}
+        """)
+        tfl = QVBoxLayout(self._turno_activo_frame); tfl.setContentsMargins(16,12,16,12); tfl.setSpacing(6)
+
+        top_row = QHBoxLayout()
+        self._turno_status_lbl = QLabel("⏱️  Sin turno activo")
+        self._turno_status_lbl.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        self._turno_status_lbl.setStyleSheet(f"color:{SUCCESS}; background:transparent;")
+        top_row.addWidget(self._turno_status_lbl)
+        top_row.addStretch()
+
+        self._iniciar_turno_btn = _btn("▶️  Iniciar Turno", SUCCESS, "#1E8449", h=36)
+        self._iniciar_turno_btn.clicked.connect(self._iniciar_turno)
+        top_row.addWidget(self._iniciar_turno_btn)
+
+        self._cerrar_turno_btn = _btn("⏹️  Cerrar Turno", DANGER, "#C0392B", h=36)
+        self._cerrar_turno_btn.setVisible(False)
+        self._cerrar_turno_btn.clicked.connect(self._cerrar_turno)
+        top_row.addWidget(self._cerrar_turno_btn)
+
+        tfl.addLayout(top_row)
+
+        self._turno_info_lbl = QLabel("")
+        self._turno_info_lbl.setStyleSheet(f"color:{MUTED}; font-size:12px; background:transparent;")
+        tfl.addWidget(self._turno_info_lbl)
+
+        # Totales del turno actual
+        self._turno_totales_lbl = QLabel("")
+        self._turno_totales_lbl.setStyleSheet(f"color:{TEXT}; font-size:13px; font-weight:600; background:transparent;")
+        tfl.addWidget(self._turno_totales_lbl)
+
+        lay.addWidget(self._turno_activo_frame)
+
+        # Historial de turnos
+        hist_lbl = QLabel("Historial de Turnos")
+        hist_lbl.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        hist_lbl.setStyleSheet(f"color:{PRIMARY};")
+        lay.addWidget(hist_lbl)
+
+        self._turnos_table = QTableWidget()
+        self._turnos_table.setColumnCount(7)
+        self._turnos_table.setHorizontalHeaderLabels(
+            ["Turno", "Fecha", "Inicio", "Fin", "Cobros", "Cancelados", "Total"]
+        )
+        self._turnos_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._turnos_table.verticalHeader().setVisible(False)
+        self._turnos_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._turnos_table.setAlternatingRowColors(True)
+        self._turnos_table.setStyleSheet(f"""
+            QTableWidget {{ background:{CARD}; border-radius:10px; border:1px solid {BORDER}; font-size:13px; }}
+            QHeaderView::section {{ background:{PRIMARY}; color:white; padding:8px; font-weight:700; border:none; }}
+            QTableWidget::item {{ padding:8px; color:{TEXT}; }}
+            QTableWidget::item:alternate {{ background:#F8FBFC; }}
+        """)
+        lay.addWidget(self._turnos_table)
+        return w
+
+    def _build_bitacora_tab(self):
+        """Subtab de bitácora de acciones."""
+        w = QWidget(); w.setStyleSheet(f"background:{BG};")
+        lay = QVBoxLayout(w); lay.setContentsMargins(12,12,12,12); lay.setSpacing(10)
+
+        top = QHBoxLayout()
+        title = QLabel("📋  Registro de Acciones")
+        title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        title.setStyleSheet(f"color:{PRIMARY};")
+        top.addWidget(title); top.addStretch()
+        refresh_btn = _btn("🔄", "#ECF0F1", "#D5DBDB", TEXT, w=42)
+        refresh_btn.clicked.connect(self._load_bitacora)
+        top.addWidget(refresh_btn)
+        lay.addLayout(top)
+
+        info = QLabel("Aquí se registran eliminaciones, cambios importantes y acciones del sistema.")
+        info.setStyleSheet(f"color:{MUTED}; font-size:12px;")
+        lay.addWidget(info)
+
+        self._bitacora_table = QTableWidget()
+        self._bitacora_table.setColumnCount(4)
+        self._bitacora_table.setHorizontalHeaderLabels(["Fecha", "Usuario", "Acción", "Detalle"])
+        self._bitacora_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._bitacora_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self._bitacora_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self._bitacora_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self._bitacora_table.verticalHeader().setVisible(False)
+        self._bitacora_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._bitacora_table.setAlternatingRowColors(True)
+        self._bitacora_table.setWordWrap(True)
+        self._bitacora_table.setStyleSheet(f"""
+            QTableWidget {{ background:{CARD}; border-radius:10px; border:1px solid {BORDER}; font-size:12px; }}
+            QHeaderView::section {{ background:{PRIMARY}; color:white; padding:8px; font-weight:700; border:none; }}
+            QTableWidget::item {{ padding:8px; color:{TEXT}; }}
+            QTableWidget::item:alternate {{ background:#F8FBFC; }}
+        """)
+        lay.addWidget(self._bitacora_table)
         return w
 
     def _corte_login(self):
@@ -1155,6 +1298,147 @@ class FacturacionWidget(QWidget):
             self._logout_btn.setVisible(True)
             self._refresh_btn.setVisible(True)
             self._corte_calcular()
+            self._load_turno_activo()
+            self._load_bitacora()
+
+    def _iniciar_turno(self):
+        ta = turno_activo()
+        if ta:
+            m = QMessageBox(self); m.setWindowTitle("Aviso")
+            m.setText("Ya hay un turno activo. Ciérralo antes de iniciar uno nuevo.")
+            m.setStyleSheet("color:black; background:white;"); m.exec()
+            return
+
+        # Determinar número de turno del día
+        from modules.corte import historial_turnos
+        from datetime import date as _date
+        turnos_hoy = [t for t in historial_turnos() if t["fecha"] == _date.today().strftime("%Y-%m-%d")]
+        num = len(turnos_hoy) + 1
+
+        turno_id = iniciar_turno(self._corte_usuario["id"], num)
+        registrar_en_bitacora(
+            self._corte_usuario["id"],
+            "INICIAR_TURNO",
+            f"Turno #{num} iniciado por {self._corte_usuario['nombre']}"
+        )
+        self._load_turno_activo()
+        self._load_bitacora()
+
+        m = QMessageBox(self); m.setWindowTitle("Turno iniciado")
+        m.setText(f"✅ Turno #{num} iniciado correctamente.")
+        m.setStyleSheet("color:black; background:white;"); m.exec()
+
+    def _cerrar_turno(self):
+        ta = turno_activo()
+        if not ta:
+            return
+
+        m = QMessageBox(self); m.setWindowTitle("Cerrar Turno")
+        m.setText(f"¿Cerrar el Turno #{ta['numero_turno']}?\nSe guardarán todos los totales del turno.")
+        m.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        m.setStyleSheet("color:black; background:white;")
+        if m.exec() != QMessageBox.StandardButton.Yes:
+            return
+
+        datos = cerrar_turno(ta["id"])
+        registrar_en_bitacora(
+            self._corte_usuario["id"],
+            "CERRAR_TURNO",
+            f"Turno #{ta['numero_turno']} cerrado. Total: ${datos['total_general']:,.2f} | "
+            f"Cobros: {datos['num_cobros']} | Cancelados: {datos['num_cancelados']}"
+        )
+        self._load_turno_activo()
+        self._load_bitacora()
+        self._load_historial_turnos()
+
+        m2 = QMessageBox(self); m2.setWindowTitle("Turno cerrado")
+        m2.setText(
+            f"✅ Turno #{ta['numero_turno']} cerrado.\n\n"
+            f"Total: ${datos['total_general']:,.2f}\n"
+            f"Efectivo: ${datos['total_efectivo']:,.2f}\n"
+            f"Tarjeta: ${datos['total_tarjeta']:,.2f}\n"
+            f"Cobros: {datos['num_cobros']} | Cancelados: {datos['num_cancelados']}"
+        )
+        m2.setStyleSheet("color:black; background:white;"); m2.exec()
+
+    def _load_turno_activo(self):
+        ta = turno_activo()
+        if ta:
+            self._turno_status_lbl.setText(f"⏱️  Turno #{ta['numero_turno']} en curso")
+            self._turno_info_lbl.setText(
+                f"Iniciado a las {ta['hora_inicio']} por {ta.get('usuario_nombre','—')}"
+            )
+            # Calcular totales actuales
+            datos = calcular_turno(ta["id"])
+            self._turno_totales_lbl.setText(
+                f"💰 Total: ${datos['total_general']:,.2f}  |  "
+                f"Cobros: {datos['num_cobros']}  |  "
+                f"Cancelados: {datos['num_cancelados']}"
+            )
+            self._turno_activo_frame.setStyleSheet(f"""
+                QFrame {{ background:#E8F5E9; border-radius:10px; border:2px solid {SUCCESS}; }}
+            """)
+            self._iniciar_turno_btn.setVisible(False)
+            self._cerrar_turno_btn.setVisible(True)
+        else:
+            self._turno_status_lbl.setText("⏸️  Sin turno activo")
+            self._turno_info_lbl.setText("Inicia un turno para registrar cobros de este período")
+            self._turno_totales_lbl.setText("")
+            self._turno_activo_frame.setStyleSheet(f"""
+                QFrame {{ background:#FFF8E1; border-radius:10px; border:2px solid {WARNING}; }}
+            """)
+            self._iniciar_turno_btn.setVisible(True)
+            self._cerrar_turno_btn.setVisible(False)
+
+        self._load_historial_turnos()
+
+    def _load_historial_turnos(self):
+        turnos = historial_turnos()
+        self._turnos_table.setRowCount(len(turnos))
+        for i, t in enumerate(turnos):
+            estado_color = SUCCESS if t["estado"] == "cerrado" else WARNING
+            vals = [
+                f"Turno #{t['numero_turno']}",
+                t["fecha"],
+                t["hora_inicio"][:5],
+                t.get("hora_fin","")[:5] if t.get("hora_fin") else "—",
+                str(t.get("num_cobros", 0)),
+                str(t.get("num_cancelados", 0)),
+                f"${t.get('total_general', 0):,.2f}",
+            ]
+            for col, val in enumerate(vals):
+                item = QTableWidgetItem(val)
+                if col == 6:
+                    item.setForeground(QBrush(QColor(estado_color)))
+                    f = QFont(); f.setBold(True); item.setFont(f)
+                self._turnos_table.setItem(i, col, item)
+            self._turnos_table.setRowHeight(i, 40)
+
+    def _load_bitacora(self):
+        registros = obtener_bitacora_completa()
+        self._bitacora_table.setRowCount(len(registros))
+        colores_accion = {
+            "ELIMINAR_COBRO": DANGER,
+            "INICIAR_TURNO":  SUCCESS,
+            "CERRAR_TURNO":   WARNING,
+        }
+        for i, r in enumerate(registros):
+            fecha = r.get("fecha","")[:16].replace("T"," ")
+            accion = r.get("accion","—")
+            color = colores_accion.get(accion, TEXT)
+            vals = [
+                fecha,
+                r.get("usuario_nombre","Sistema") or "Sistema",
+                accion,
+                r.get("detalle","—") or "—",
+            ]
+            for col, val in enumerate(vals):
+                item = QTableWidgetItem(val)
+                if col == 2:
+                    item.setForeground(QBrush(QColor(color)))
+                    f = QFont(); f.setBold(True); item.setFont(f)
+                self._bitacora_table.setItem(i, col, item)
+            self._bitacora_table.setRowHeight(i, 40)
 
     def _corte_logout(self):
         self._corte_usuario = None
@@ -1181,14 +1465,14 @@ class FacturacionWidget(QWidget):
             if item.widget(): item.widget().deleteLater()
 
         cards = [
-            ("💵","Efectivo",      f"${d['total_efectivo']:,.2f}",      SUCCESS),
-            ("💳","Tarjeta",       f"${d['total_tarjeta']:,.2f}",       SECONDARY),
-            ("🏦","Transferencia", f"${d['total_transferencia']:,.2f}", WARNING),
-            ("📋","Crédito",       f"${d['total_credito']:,.2f}",       "#8E44AD"),
-            ("🏆","TOTAL GENERAL", f"${d['total_general']:,.2f}",       PRIMARY),
-            ("👥","Pacientes",     str(d["num_pacientes"]),              ACCENT),
-            ("✅","Completadas",   str(d["citas_completadas"]),          SUCCESS),
-            ("❌","Canceladas",    str(d["citas_canceladas"]),           DANGER),
+            ("💵","Efectivo",          f"${d['total_efectivo']:,.2f}",           SUCCESS),
+            ("💳","Tarjeta",           f"${d['total_tarjeta']:,.2f}",            SECONDARY),
+            ("🏦","Transferencia",     f"${d['total_transferencia']:,.2f}",      WARNING),
+            ("📋","Crédito",           f"${d['total_credito']:,.2f}",            "#8E44AD"),
+            ("🏆","TOTAL GENERAL",     f"${d['total_general']:,.2f}",            PRIMARY),
+            ("👥","Pacientes",         str(d["num_pacientes"]),                   ACCENT),
+            ("✅","Citas Completadas", str(d["citas_completadas"]),               SUCCESS),
+            ("🗑️","Cobros Eliminados", str(d.get("cobros_eliminados", 0)),       DANGER),
         ]
         for i, (icon, label, value, color) in enumerate(cards):
             card = QFrame()
@@ -1294,6 +1578,12 @@ class FacturacionWidget(QWidget):
             eliminar_pago(pago_id, auth.usuario_autenticado["id"], detalle)
             self._load_cobros()
             self._load_pendientes()
+            # Refrescar turno y bitácora si están visibles
+            try:
+                self._load_turno_activo()
+                self._load_bitacora()
+            except Exception:
+                pass
             m2 = QMessageBox(self); m2.setWindowTitle("Eliminado")
             m2.setText("✅ Cobro eliminado y registrado en bitácora.")
             m2.setStyleSheet("color:black; background:white;"); m2.exec()

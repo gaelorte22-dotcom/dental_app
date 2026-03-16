@@ -142,6 +142,14 @@ def calcular_corte(fecha: str) -> dict:
     """, (fecha,))
     num_pac = cur.fetchone()[0] or 0
 
+    # Cobros eliminados del día (bitácora)
+    cur.execute("""
+        SELECT COUNT(*) FROM bitacora
+        WHERE accion = 'ELIMINAR_COBRO'
+          AND DATE(fecha) = ?
+    """, (fecha,))
+    cobros_eliminados = cur.fetchone()[0] or 0
+
     # Comparativo últimos 7 días
     comparativo = []
     for i in range(6, -1, -1):
@@ -168,6 +176,7 @@ def calcular_corte(fecha: str) -> dict:
         "num_pacientes":      num_pac,
         "citas_completadas":  citas_raw.get("completada", 0),
         "citas_canceladas":   citas_raw.get("cancelada", 0),
+        "cobros_eliminados":  cobros_eliminados,
         "comparativo":        comparativo,
     }
 
@@ -203,6 +212,172 @@ def historial_cortes() -> list:
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
+
+
+# ── Turnos ────────────────────────────────────────────────────────────────────
+def turno_activo() -> dict | None:
+    """Retorna el turno actualmente abierto, o None."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT t.*, u.nombre as usuario_nombre
+        FROM turnos t LEFT JOIN usuarios u ON t.usuario_id = u.id
+        WHERE t.estado = 'abierto'
+        ORDER BY t.id DESC LIMIT 1
+    """)
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def iniciar_turno(usuario_id: int, numero_turno: int = 1) -> int:
+    """Abre un nuevo turno. Retorna el ID del turno."""
+    conn = get_connection()
+    ahora = datetime.now()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO turnos (usuario_id, fecha, hora_inicio, numero_turno, estado)
+        VALUES (?, ?, ?, ?, 'abierto')
+    """, (usuario_id, ahora.strftime("%Y-%m-%d"), ahora.strftime("%H:%M:%S"), numero_turno))
+    turno_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return turno_id
+
+
+def calcular_turno(turno_id: int) -> dict:
+    """Calcula los totales del turno desde su hora_inicio hasta ahora."""
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # Obtener datos del turno
+    cur.execute("SELECT * FROM turnos WHERE id=?", (turno_id,))
+    turno = dict(cur.fetchone())
+
+    fecha        = turno["fecha"]
+    hora_inicio  = turno["hora_inicio"]
+    hora_fin     = turno.get("hora_fin") or datetime.now().strftime("%H:%M:%S")
+    dt_inicio    = f"{fecha} {hora_inicio}"
+    dt_fin       = f"{fecha} {hora_fin}"
+    num_turno    = turno["numero_turno"]
+
+    # Cobros dentro del turno
+    cur.execute("""
+        SELECT metodo_pago, SUM(monto_pagado)
+        FROM pagos
+        WHERE fecha BETWEEN ? AND ?
+          AND estado IN ('pagado','parcial')
+        GROUP BY metodo_pago
+    """, (dt_inicio, dt_fin))
+    metodos = {row[0]: row[1] for row in cur.fetchall()}
+
+    # Cancelaciones del turno — busca por número de turno en el detalle
+    # Y también por rango de fechas como respaldo
+    cur.execute("""
+        SELECT COUNT(*) FROM bitacora
+        WHERE accion = 'ELIMINAR_COBRO'
+          AND (
+              detalle LIKE ? 
+              OR fecha BETWEEN ? AND ?
+          )
+    """, (f"[Turno #{num_turno}]%", dt_inicio, dt_fin))
+    num_cancelados = cur.fetchone()[0] or 0
+
+    # Número de cobros del turno
+    cur.execute("""
+        SELECT COUNT(*) FROM pagos
+        WHERE fecha BETWEEN ? AND ?
+          AND estado IN ('pagado','parcial')
+    """, (dt_inicio, dt_fin))
+    num_cobros = cur.fetchone()[0] or 0
+
+    conn.close()
+
+    total_efectivo      = metodos.get("Efectivo", 0) or 0
+    total_tarjeta       = metodos.get("Tarjeta", 0) or 0
+    total_transferencia = metodos.get("Transferencia", 0) or 0
+    total_credito       = metodos.get("Crédito", 0) or 0
+    total_general       = total_efectivo + total_tarjeta + total_transferencia + total_credito
+
+    return {
+        "turno_id":           turno_id,
+        "numero_turno":       num_turno,
+        "fecha":              fecha,
+        "hora_inicio":        hora_inicio,
+        "hora_fin":           hora_fin,
+        "total_efectivo":     total_efectivo,
+        "total_tarjeta":      total_tarjeta,
+        "total_transferencia":total_transferencia,
+        "total_credito":      total_credito,
+        "total_general":      total_general,
+        "num_cobros":         num_cobros,
+        "num_cancelados":     num_cancelados,
+    }
+
+
+def cerrar_turno(turno_id: int, notas: str = "") -> dict:
+    """Cierra el turno activo y guarda los totales."""
+    datos = calcular_turno(turno_id)
+    hora_fin = datetime.now().strftime("%H:%M:%S")
+    conn = get_connection()
+    conn.execute("""
+        UPDATE turnos SET
+            hora_fin=?, estado='cerrado',
+            total_efectivo=?, total_tarjeta=?,
+            total_transferencia=?, total_credito=?,
+            total_general=?, num_cobros=?,
+            num_cancelados=?, notas=?
+        WHERE id=?
+    """, (
+        hora_fin,
+        datos["total_efectivo"], datos["total_tarjeta"],
+        datos["total_transferencia"], datos["total_credito"],
+        datos["total_general"], datos["num_cobros"],
+        datos["num_cancelados"], notas,
+        turno_id
+    ))
+    conn.commit()
+    conn.close()
+    datos["hora_fin"] = hora_fin
+    return datos
+
+
+def historial_turnos(limite=20) -> list:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT t.*, u.nombre as usuario_nombre
+        FROM turnos t LEFT JOIN usuarios u ON t.usuario_id = u.id
+        ORDER BY t.id DESC LIMIT ?
+    """, (limite,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+# ── Bitácora ──────────────────────────────────────────────────────────────────
+def obtener_bitacora_completa(limite=100) -> list:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT b.*, u.nombre as usuario_nombre
+        FROM bitacora b LEFT JOIN usuarios u ON b.usuario_id = u.id
+        ORDER BY b.fecha DESC LIMIT ?
+    """, (limite,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def registrar_en_bitacora(usuario_id: int, accion: str, detalle: str):
+    fecha_local = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conn = get_connection()
+    conn.execute("""
+        INSERT INTO bitacora (usuario_id, accion, detalle, fecha)
+        VALUES (?,?,?,?)
+    """, (usuario_id, accion, detalle, fecha_local))
+    conn.commit()
+    conn.close()
 
 
 # ── PDF Export ────────────────────────────────────────────────────────────────
