@@ -288,7 +288,7 @@ class MainWindow(QMainWindow):
         """)
         sb.addWidget(self.update_btn)
 
-        self.ver_lbl = QLabel("v1.0.8")
+        self.ver_lbl = QLabel("v1.0.9")
         self.ver_lbl.setFont(QFont("Segoe UI", 10))
         self.ver_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sb.addWidget(self.ver_lbl)
