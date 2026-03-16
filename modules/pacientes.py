@@ -177,12 +177,16 @@ class PacienteDialog(QDialog):
 
 # ── Main patients widget ──────────────────────────────────────────────────────
 class PacientesWidget(QWidget):
-    paciente_seleccionado = pyqtSignal(int)   # emits patient id
+    paciente_seleccionado = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
         self.setStyleSheet(f"background:{BG};")
         self._build()
+        self._load()
+
+    def showEvent(self, event):
+        super().showEvent(event)
         self._load()
 
     def _build(self):
@@ -210,6 +214,12 @@ class PacientesWidget(QWidget):
         """)
         self.search.textChanged.connect(self._load)
         header.addWidget(self.search)
+
+        refresh_btn = _btn("🔄", "#ECF0F1", "#D5DBDB", TEXT)
+        refresh_btn.setToolTip("Refrescar lista")
+        refresh_btn.setFixedWidth(42)
+        refresh_btn.clicked.connect(self._load)
+        header.addWidget(refresh_btn)
 
         nuevo_btn = _btn("＋  Nuevo Paciente", PRIMARY, SECONDARY)
         nuevo_btn.clicked.connect(self._nuevo)
@@ -287,7 +297,7 @@ class PacientesWidget(QWidget):
             ver_btn = _btn("👁", "#27AE60", "#1E8449")
             ver_btn.setFixedSize(34, 28)
             ver_btn.setToolTip("Ver expediente")
-            ver_btn.clicked.connect(lambda _, pid=p["id"]: self.paciente_seleccionado.emit(pid))
+            ver_btn.clicked.connect(lambda _, pid=p["id"]: self._ver_expediente(pid))
 
             hb.addWidget(ver_btn); hb.addWidget(edit_btn); hb.addWidget(del_btn)
             self.table.setCellWidget(row, 6, cell)

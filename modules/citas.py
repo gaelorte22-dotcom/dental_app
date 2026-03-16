@@ -309,6 +309,11 @@ class CitasWidget(QWidget):
         self._highlight_calendar()
         self._load()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._highlight_calendar()
+        self._load()
+
     def _build(self):
         root = QHBoxLayout(self)
         root.setSpacing(16)

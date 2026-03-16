@@ -1128,6 +1128,12 @@ class ExpedientesWidget(QWidget):
         self.setStyleSheet(f"background:{BG};")
         self._build()
 
+    def showEvent(self, event):
+        """Refresca la lista cada vez que se muestra el módulo."""
+        super().showEvent(event)
+        if hasattr(self, '_search'):
+            self._buscar(self._search.text())
+
     def _build(self):
         self._stack_layout = QVBoxLayout(self)
         self._stack_layout.setContentsMargins(0,0,0,0)
