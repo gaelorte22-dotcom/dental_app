@@ -1,7 +1,7 @@
 # Herramientas privadas del vendedor
 generate_license.py
 
-# Base de datos (datos reales de clientes/pacientes)
+# Base de datos
 dental_clinic.db
 *.db
 
@@ -9,7 +9,7 @@ dental_clinic.db
 license.key
 *.key
 
-# Archivos de pacientes (radiografías, fotos)
+# Archivos de pacientes
 archivos_pacientes/
 
 # PyInstaller
