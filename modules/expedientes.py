@@ -44,21 +44,33 @@ _MESES = ["","enero","febrero","marzo","abril","mayo","junio",
           "julio","agosto","septiembre","octubre","noviembre","diciembre"]
 
 ESTADOS_DIENTE = {
-    "sano":       ("#27AE60", "Sano"),
-    "caries":     ("#E74C3C", "Caries"),
-    "obturado":   ("#3498DB", "Obturado"),
-    "corona":     ("#9B59B6", "Corona"),
-    "extraccion": ("#7F8C8D", "Extraído"),
-    "implante":   ("#F39C12", "Implante"),
-    "fractura":   ("#E67E22", "Fractura"),
+    "sano":        ("#27AE60", "Sano"),
+    "caries":      ("#E74C3C", "Caries"),
+    "obturado":    ("#3498DB", "Obturado"),
+    "corona":      ("#9B59B6", "Corona"),
+    "ausente":     ("#7F8C8D", "Ausente"),
+    "implante":    ("#F39C12", "Implante"),
+    "fractura":    ("#E67E22", "Fractura"),
+    "pulpotomia":  ("#E91E63", "Pulpotomía"),
+    "pulpectomia": ("#FF5722", "Pulpectomía"),
+    "erupcionando":("#00BCD4", "Parcialmente Erupcionado"),
+}
+
+# Estados disponibles por tipo de dentición
+ESTADOS_POR_TIPO = {
+    "temporal":   ["sano","caries","obturado","corona","ausente","fractura","pulpotomia","pulpectomia","erupcionando"],
+    "mixta":      ["sano","caries","obturado","corona","ausente","fractura","pulpotomia","pulpectomia","erupcionando"],
+    "permanente": ["sano","caries","obturado","corona","ausente","implante","fractura","erupcionando"],
 }
 
 def _get_app_data_dir():
-    if os.name == 'nt':
-        base = os.environ.get('APPDATA', os.path.expanduser('~'))
+    if sys.platform == "win32" or os.name == "nt":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    elif sys.platform == "darwin":
+        base = os.path.join(os.path.expanduser("~"), "Library", "Application Support")
     else:
-        base = os.path.expanduser('~')
-    app_dir = os.path.join(base, 'DentalApp')
+        base = os.path.expanduser("~")
+    app_dir = os.path.join(base, "DentalApp")
     os.makedirs(app_dir, exist_ok=True)
     return app_dir
 
@@ -240,74 +252,161 @@ class ToothButton(QPushButton):
         self.setText(self.label)
 
 
+# ── Dentición por tipo ────────────────────────────────────────────────────────
+DENTICION = {
+    "temporal": {
+        "nombre": "🧒 Temporal (3-6 años)",
+        "superior": [55,54,53,52,51,61,62,63,64,65],
+        "inferior": [85,84,83,82,81,71,72,73,74,75],
+    },
+    "mixta": {
+        "nombre": "👦 Mixta (7-12 años)",
+        "superior": [16,55,54,53,52,51,61,62,63,64,65,26],
+        "inferior": [46,85,84,83,82,81,71,72,73,74,75,36],
+    },
+    "permanente": {
+        "nombre": "🧑 Permanente (13+ años)",
+        # Sin muelas del juicio (18,28,38,48)
+        "superior": list(range(17,10,-1)) + list(range(21,28)),
+        "inferior": list(range(47,40,-1)) + list(range(31,38)),
+    },
+}
+
+def calcular_tipo_denticion(fecha_nacimiento: str) -> str:
+    """Calcula el tipo de dentición según la fecha de nacimiento."""
+    try:
+        from datetime import date
+        nacimiento = datetime.strptime(fecha_nacimiento, "%Y-%m-%d").date()
+        hoy = date.today()
+        edad = hoy.year - nacimiento.year - (
+            (hoy.month, hoy.day) < (nacimiento.month, nacimiento.day)
+        )
+        if edad <= 6:   return "temporal"
+        elif edad <= 12: return "mixta"
+        else:           return "permanente"
+    except Exception:
+        return "permanente"
+
+
 # ── Odontograma widget ────────────────────────────────────────────────────────
 class OdontogramaWidget(QWidget):
-    changed = pyqtSignal(int, str)  # diente_num, estado
+    changed = pyqtSignal(int, str)
 
-    # Superior derecho → izquierdo (18..11), superior izq (21..28)
-    # Inferior derecho → izquierdo (48..41), inferior izq (31..38)
-    SUPERIOR = list(range(18, 10, -1)) + list(range(21, 29))
-    INFERIOR = list(range(48, 40, -1)) + list(range(31, 39))
-
-    def __init__(self, parent=None):
+    def __init__(self, tipo="permanente", parent=None):
         super().__init__(parent)
         self.setStyleSheet(f"background:{CARD};")
         self._buttons = {}
+        self._tipo = tipo
         self._build()
 
     def _build(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(4)
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(12, 8, 12, 8)
+        self._layout.setSpacing(6)
+
+        # Selector de tipo
+        tipo_row = QHBoxLayout()
+        tipo_lbl = QLabel("Tipo de dentición:")
+        tipo_lbl.setStyleSheet(f"color:{TEXT}; font-weight:600; font-size:12px; background:transparent;")
+        tipo_row.addWidget(tipo_lbl)
+
+        self._tipo_combo = QComboBox()
+        for key, val in DENTICION.items():
+            self._tipo_combo.addItem(val["nombre"], key)
+        self._tipo_combo.setCurrentIndex(
+            list(DENTICION.keys()).index(self._tipo)
+        )
+        self._tipo_combo.setStyleSheet(f"""
+            QComboBox {{
+                border:1.5px solid {BORDER}; border-radius:8px;
+                padding:5px 10px; font-size:12px; background:white; color:{TEXT};
+            }}
+            QComboBox QAbstractItemView {{ color:{TEXT}; background:white; }}
+        """)
+        self._tipo_combo.currentIndexChanged.connect(self._cambiar_tipo)
+        tipo_row.addWidget(self._tipo_combo)
+        tipo_row.addStretch()
+        self._layout.addLayout(tipo_row)
 
         # Leyenda
         legend = QHBoxLayout()
         legend.addStretch()
         for estado, (color, nombre) in ESTADOS_DIENTE.items():
             dot = QLabel(f"● {nombre}")
-            dot.setStyleSheet(f"color:{color}; font-size:11px; font-weight:600;")
+            dot.setStyleSheet(f"color:{color}; font-size:11px; font-weight:600; background:transparent;")
             legend.addWidget(dot)
         legend.addStretch()
-        layout.addLayout(legend)
+        self._layout.addLayout(legend)
+
+        # Contenedor de dientes
+        self._dientes_widget = QWidget()
+        self._dientes_widget.setStyleSheet("background:transparent;")
+        self._dientes_layout = QVBoxLayout(self._dientes_widget)
+        self._dientes_layout.setContentsMargins(0,0,0,0)
+        self._dientes_layout.setSpacing(4)
+        self._layout.addWidget(self._dientes_widget)
+
+        self._render_dientes()
+
+    def _render_dientes(self):
+        # Limpiar dientes anteriores
+        while self._dientes_layout.count():
+            item = self._dientes_layout.takeAt(0)
+            if item.widget(): item.widget().deleteLater()
+        self._buttons.clear()
+
+        d = DENTICION[self._tipo]
 
         # Superior
         sup_lbl = QLabel("Superior")
         sup_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sup_lbl.setStyleSheet(f"color:{MUTED}; font-size:11px;")
-        layout.addWidget(sup_lbl)
+        sup_lbl.setStyleSheet(f"color:{MUTED}; font-size:11px; background:transparent;")
+        self._dientes_layout.addWidget(sup_lbl)
 
         sup_row = QHBoxLayout()
         sup_row.setSpacing(3)
         sup_row.addStretch()
-        for n in self.SUPERIOR:
+        for n in d["superior"]:
             btn = ToothButton(n, str(n))
             btn.clicked.connect(lambda _, num=n: self._on_click(num))
             self._buttons[n] = btn
             sup_row.addWidget(btn)
         sup_row.addStretch()
-        layout.addLayout(sup_row)
+        self._dientes_layout.addLayout(sup_row)
 
         # Separador
         sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"background:{BORDER};"); sep.setFixedHeight(1)
-        layout.addWidget(sep)
+        self._dientes_layout.addWidget(sep)
 
         # Inferior
         inf_row = QHBoxLayout()
         inf_row.setSpacing(3)
         inf_row.addStretch()
-        for n in self.INFERIOR:
+        for n in d["inferior"]:
             btn = ToothButton(n, str(n))
             btn.clicked.connect(lambda _, num=n: self._on_click(num))
             self._buttons[n] = btn
             inf_row.addWidget(btn)
         inf_row.addStretch()
-        layout.addLayout(inf_row)
+        self._dientes_layout.addLayout(inf_row)
 
         inf_lbl = QLabel("Inferior")
         inf_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        inf_lbl.setStyleSheet(f"color:{MUTED}; font-size:11px;")
-        layout.addWidget(inf_lbl)
+        inf_lbl.setStyleSheet(f"color:{MUTED}; font-size:11px; background:transparent;")
+        self._dientes_layout.addWidget(inf_lbl)
+
+    def _cambiar_tipo(self, idx):
+        self._tipo = self._tipo_combo.currentData()
+        self._render_dientes()
+
+    def set_tipo(self, tipo: str):
+        """Cambia el tipo de dentición programáticamente."""
+        if tipo in DENTICION:
+            self._tipo = tipo
+            idx = list(DENTICION.keys()).index(tipo)
+            self._tipo_combo.setCurrentIndex(idx)
+            self._render_dientes()
 
     def load(self, datos: dict):
         for num, btn in self._buttons.items():
@@ -319,7 +418,7 @@ class OdontogramaWidget(QWidget):
                 btn.setToolTip(f"Diente {num}")
 
     def _on_click(self, num):
-        dlg = DienteDialog(num, self._buttons[num].estado, self)
+        dlg = DienteDialog(num, self._buttons[num].estado, self._tipo, self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._buttons[num].set_estado(dlg.estado)
             self._buttons[num].setToolTip(f"Diente {num}: {dlg.estado.capitalize()}\n{dlg.notas}")
@@ -333,13 +432,14 @@ class OdontogramaWidget(QWidget):
 
 # ── Diente dialog ─────────────────────────────────────────────────────────────
 class DienteDialog(QDialog):
-    def __init__(self, numero, estado_actual, parent=None):
+    def __init__(self, numero, estado_actual, tipo_denticion="permanente", parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Diente {numero}")
         self.setFixedWidth(340)
         self.setStyleSheet(f"background:{BG}; color:{TEXT};")
         self.estado = estado_actual
         self.notas  = ""
+        self._tipo  = tipo_denticion
         self._build(numero, estado_actual)
 
     def _build(self, numero, estado_actual):
@@ -358,10 +458,14 @@ class DienteDialog(QDialog):
 
         self.estado_combo = QComboBox()
         self.estado_combo.setStyleSheet(_fs())
-        for key, (color, nombre) in ESTADOS_DIENTE.items():
-            self.estado_combo.addItem(nombre, key)
-            if key == estado_actual:
-                self.estado_combo.setCurrentIndex(self.estado_combo.count()-1)
+        # Filtrar estados según tipo de dentición
+        estados_permitidos = ESTADOS_POR_TIPO.get(self._tipo, list(ESTADOS_DIENTE.keys()))
+        for key in estados_permitidos:
+            if key in ESTADOS_DIENTE:
+                color, nombre = ESTADOS_DIENTE[key]
+                self.estado_combo.addItem(nombre, key)
+                if key == estado_actual:
+                    self.estado_combo.setCurrentIndex(self.estado_combo.count()-1)
         layout.addWidget(self.estado_combo)
 
         notas_lbl = QLabel("Notas:")
@@ -837,11 +941,17 @@ class ExpedienteWidget(QWidget):
         w = QWidget(); w.setStyleSheet(f"background:{BG};")
         lay = QVBoxLayout(w); lay.setContentsMargins(16,14,16,14); lay.setSpacing(10)
 
-        info = QLabel("Haz clic en cualquier diente para cambiar su estado")
+        # Detectar tipo según edad del paciente
+        tipo = calcular_tipo_denticion(
+            self.paciente.get("fecha_nacimiento", "") or ""
+        )
+
+        info = QLabel("Haz clic en cualquier diente para cambiar su estado. El tipo de dentición se detecta automáticamente por la edad del paciente.")
+        info.setWordWrap(True)
         info.setStyleSheet(f"color:{MUTED}; font-size:12px;")
         lay.addWidget(info)
 
-        self.odontograma = OdontogramaWidget()
+        self.odontograma = OdontogramaWidget(tipo=tipo)
         self.odontograma.changed.connect(self._on_diente_changed)
         lay.addWidget(self.odontograma)
         lay.addStretch()
@@ -1051,7 +1161,13 @@ class ExpedienteWidget(QWidget):
 
     def _abrir_archivo(self, ruta):
         if os.path.exists(ruta):
-            os.startfile(ruta)
+            import subprocess, sys
+            if sys.platform == "win32":
+                os.startfile(ruta)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", ruta])
+            else:
+                subprocess.Popen(["xdg-open", ruta])
         else:
             m = QMessageBox(self); m.setWindowTitle("Error")
             m.setText("Archivo no encontrado."); m.setStyleSheet("color:black; background:white;"); m.exec()

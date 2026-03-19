@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout,
     QVBoxLayout, QLabel, QPushButton, QStackedWidget, QFrame, QGridLayout
 )
-from PyQt6.QtCore import Qt, QDate, QTime
+from PyQt6.QtCore import Qt, QDate, QTime, QTimer
 from PyQt6.QtGui import QFont
 
 from database.db_manager import init_db
@@ -17,7 +17,7 @@ from modules.facturacion import FacturacionWidget
 from modules.expedientes import ExpedientesWidget
 from license_manager import verify_license
 from activation_screen import ActivationScreen
-from theme import theme, get_palette, app_stylesheet
+from theme import get_palette, app_stylesheet
 from notificaciones import ReminderManager
 from updater import verificar_actualizacion
 
@@ -37,6 +37,18 @@ _MESES = ["","enero","febrero","marzo","abril","mayo","junio",
           "julio","agosto","septiembre","octubre","noviembre","diciembre"]
 _DIAS  = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
 
+PRIMARY    = "#1A6B8A"
+SECONDARY  = "#2196B0"
+ACCENT     = "#4ECDC4"
+BG         = "#F5F8FA"
+CARD       = "#FFFFFF"
+TEXT       = "#2C3E50"
+MUTED      = "#7F8C8D"
+BORDER     = "#DEE4E8"
+SIDEBAR_BG = "#0F3D52"
+SIDEBAR_HVR= "#1A6B8A"
+SIDEBAR_ACT= "#2196B0"
+
 
 # ── Sidebar nav button ────────────────────────────────────────────────────────
 class SidebarButton(QPushButton):
@@ -46,51 +58,14 @@ class SidebarButton(QPushButton):
         self.setFixedHeight(48)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFont(QFont("Segoe UI", 12))
-        self._refresh()
-        theme.connect(lambda _: self._refresh())
-
-    def _refresh(self):
-        p = get_palette()
         self.setStyleSheet(f"""
             QPushButton {{
-                background:transparent; color:{p['SIDEBAR_TXT']};
+                background:transparent; color:white;
                 border:none; border-radius:8px;
                 text-align:left; padding-left:14px;
             }}
-            QPushButton:hover   {{ background:{p['SIDEBAR_HVR']}; }}
-            QPushButton:checked {{
-                background:{p['SIDEBAR_ACT']}; color:white; font-weight:700;
-            }}
-        """)
-
-
-# ── Dark/Light toggle button ──────────────────────────────────────────────────
-class ThemeToggleButton(QPushButton):
-    def __init__(self):
-        super().__init__()
-        self.setFixedHeight(42)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFont(QFont("Segoe UI", 11))
-        self.clicked.connect(theme.toggle)
-        theme.connect(lambda _: self._refresh())
-        self._refresh()
-
-    def _refresh(self):
-        p = get_palette()
-        if theme.is_dark():
-            label = "  ☀️  Modo Claro"
-            bg    = "#2D3561"; hover = "#3D4571"
-        else:
-            label = "  🌙  Modo Oscuro"
-            bg    = "rgba(255,255,255,0.08)"; hover = "rgba(255,255,255,0.18)"
-        self.setText(label)
-        self.setStyleSheet(f"""
-            QPushButton {{
-                background:{bg}; color:{p['SIDEBAR_TXT']};
-                border:1px solid rgba(255,255,255,0.15);
-                border-radius:8px; text-align:left; padding-left:14px;
-            }}
-            QPushButton:hover {{ background:{hover}; }}
+            QPushButton:hover   {{ background:{SIDEBAR_HVR}; }}
+            QPushButton:checked {{ background:{SIDEBAR_ACT}; color:white; font-weight:700; }}
         """)
 
 
@@ -101,7 +76,6 @@ class HomeWidget(QWidget):
         self.switch_fn = switch_fn
         self._cards_meta = []
         self._build()
-        theme.connect(lambda _: self._apply())
 
     def _build(self):
         root = QVBoxLayout(self)
@@ -113,54 +87,68 @@ class HomeWidget(QWidget):
         elif hora < 18: sal = "🌤  ¡Buenas tardes!"
         else:           sal = "🌙  ¡Buenas noches!"
 
-        self.greet = QLabel(sal)
-        self.greet.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))
-        root.addWidget(self.greet)
+        greet = QLabel(sal)
+        greet.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))
+        greet.setStyleSheet(f"color:{PRIMARY}; background:transparent;")
+        root.addWidget(greet)
 
-        self.sub = QLabel(random.choice(_FRASES))
-        self.sub.setFont(QFont("Segoe UI", 15))
-        root.addWidget(self.sub)
+        sub = QLabel(random.choice(_FRASES))
+        sub.setFont(QFont("Segoe UI", 15))
+        sub.setStyleSheet(f"color:{SECONDARY}; background:transparent;")
+        root.addWidget(sub)
 
         hoy = QDate.currentDate()
-        self.date_lbl = QLabel(
+        date_lbl = QLabel(
             f"{_DIAS[hoy.dayOfWeek()-1].capitalize()}, "
             f"{hoy.day()} de {_MESES[hoy.month()]} de {hoy.year()}"
         )
-        self.date_lbl.setFont(QFont("Segoe UI", 13))
-        root.addWidget(self.date_lbl)
+        date_lbl.setFont(QFont("Segoe UI", 13))
+        date_lbl.setStyleSheet(f"color:{MUTED}; background:transparent;")
+        root.addWidget(date_lbl)
 
-        self.sep = QFrame(); self.sep.setFrameShape(QFrame.Shape.HLine)
-        self.sep.setFixedHeight(1); root.addWidget(self.sep)
+        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFixedHeight(1)
+        sep.setStyleSheet(f"background:{BORDER}; border:none;")
+        root.addWidget(sep)
 
-        self.sec_lbl = QLabel("Acceso rápido")
-        self.sec_lbl.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
-        root.addWidget(self.sec_lbl)
+        sec_lbl = QLabel("Acceso rápido")
+        sec_lbl.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
+        sec_lbl.setStyleSheet(f"color:{TEXT}; background:transparent;")
+        root.addWidget(sec_lbl)
 
         grid = QGridLayout(); grid.setSpacing(16)
         card_defs = [
-            ("👥", "Pacientes",   "Ver y gestionar pacientes", "#1A6B8A", 1),
-            ("📅", "Citas",       "Agenda del consultorio",    "#2196B0", 2),
+            ("👥", "Pacientes",   "Ver y gestionar pacientes", PRIMARY,   1),
+            ("📅", "Citas",       "Agenda del consultorio",    SECONDARY, 2),
             ("🦷", "Expedientes", "Historial clínico",         "#27AE60", 3),
             ("💰", "Facturación", "Cobros y pagos",            "#8E44AD", 4),
         ]
-        self._cards_meta = []
         for i, (icon, title, desc, color, page) in enumerate(card_defs):
-            card, desc_lbl = self._make_card(icon, title, desc, color, page)
-            self._cards_meta.append((card, desc_lbl, color))
+            card = self._make_card(icon, title, desc, color, page)
             grid.addWidget(card, i // 2, i % 2)
         root.addLayout(grid)
         root.addStretch()
 
-        self.footer = QLabel("DentalApp v1.1.6  —  Sistema de Gestión Odontológica")
-        self.footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.addWidget(self.footer)
-
-        self._apply()
+        from updater import VERSION_ACTUAL
+        footer = QLabel(f"DentalApp v{VERSION_ACTUAL}  —  Sistema de Gestión Odontológica")
+        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        footer.setStyleSheet(f"color:{MUTED}; font-size:11px; background:transparent;")
+        root.addWidget(footer)
 
     def _make_card(self, icon, title, desc, color, page):
         card = QWidget()
         card.setFixedHeight(120)
         card.setCursor(Qt.CursorShape.PointingHandCursor)
+        card.setStyleSheet(f"""
+            QWidget {{
+                background:{CARD}; border-radius:12px;
+                border:1.5px solid {BORDER};
+            }}
+            QWidget:hover {{
+                border:2px solid {color}; background:#F0F8FF;
+            }}
+            QLabel {{ background:transparent; border:none; }}
+        """)
         cl = QVBoxLayout(card); cl.setContentsMargins(20,16,20,16); cl.setSpacing(6)
 
         il = QLabel(icon); il.setFont(QFont("Segoe UI", 26))
@@ -172,44 +160,11 @@ class HomeWidget(QWidget):
         cl.addWidget(tl)
 
         dl = QLabel(desc); dl.setFont(QFont("Segoe UI", 11))
-        dl.setStyleSheet("border:none; background:transparent;")
+        dl.setStyleSheet(f"color:{MUTED}; font-size:11px; border:none; background:transparent;")
         cl.addWidget(dl)
 
         card.mousePressEvent = lambda _, p=page: self.switch_fn(p)
-        return card, dl
-
-    def _apply(self, _=None):
-        p = get_palette()
-        # Forzar fondo y color en el widget Y todos sus QLabel hijos
-        self.setStyleSheet(f"""
-            QWidget {{ background:{p['BG']}; color:{p['TEXT']}; }}
-            QLabel  {{ background:transparent; color:{p['TEXT']}; }}
-            QFrame  {{ background:{p['BG']}; }}
-        """)
-        self.greet.setStyleSheet(f"color:{p['PRIMARY']}; background:transparent; font-size:26px; font-weight:700;")
-        self.sub.setStyleSheet(f"color:{p['SECONDARY']}; background:transparent; font-size:15px;")
-        self.date_lbl.setStyleSheet(f"color:{p['MUTED']}; background:transparent; font-size:13px;")
-        self.sep.setStyleSheet(f"background:{p['BORDER']}; border:none; max-height:1px;")
-        self.sec_lbl.setStyleSheet(f"color:{p['TEXT']}; font-weight:700; background:transparent; font-size:13px;")
-        self.footer.setStyleSheet(f"color:{p['MUTED']}; font-size:11px; background:transparent;")
-
-        hover_bg = "#1E2A3A" if theme.is_dark() else "#F0F8FF"
-        for card, desc_lbl, color in self._cards_meta:
-            card.setStyleSheet(f"""
-                QWidget {{
-                    background:{p['CARD']}; border-radius:12px;
-                    border:1.5px solid {p['BORDER']};
-                }}
-                QWidget:hover {{
-                    border:2px solid {color};
-                    background:{hover_bg};
-                }}
-                QLabel {{
-                    background:transparent;
-                    border:none;
-                }}
-            """)
-            desc_lbl.setStyleSheet(f"color:{p['MUTED']}; font-size:11px; border:none; background:transparent;")
+        return card
 
 
 # ── Main window ───────────────────────────────────────────────────────────────
@@ -221,11 +176,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(900, 600)
         self._build_ui()
         self._setup_reminders()
-        # Verificar actualizaciones 5 segundos después de abrir
-        from PyQt6.QtCore import QTimer
         QTimer.singleShot(5000, lambda: self._check_updates())
-        theme.connect(self._apply_theme)
-        self._apply_theme()
+        QApplication.instance().setStyleSheet(app_stylesheet())
 
     def _check_updates(self):
         self._updater = verificar_actualizacion(self, silencioso=True)
@@ -237,25 +189,30 @@ class MainWindow(QMainWindow):
         root.setSpacing(0); root.setContentsMargins(0,0,0,0)
 
         # ── Sidebar ───────────────────────────────────────────────────────────
-        self.sidebar = QWidget(); self.sidebar.setFixedWidth(224)
-        sb = QVBoxLayout(self.sidebar)
+        sidebar = QWidget(); sidebar.setFixedWidth(224)
+        sidebar.setStyleSheet(f"background:{SIDEBAR_BG};")
+        sb = QVBoxLayout(sidebar)
         sb.setSpacing(4); sb.setContentsMargins(12,0,12,12)
 
         logo_f = QFrame(); logo_f.setFixedHeight(72)
         logo_f.setStyleSheet("background:transparent;")
         ll = QVBoxLayout(logo_f); ll.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.logo_lbl = QLabel("🦷 DentalApp")
-        self.logo_lbl.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
-        self.logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ll.addWidget(self.logo_lbl)
-        self.sub_lbl = QLabel("Sistema de Gestión")
-        self.sub_lbl.setFont(QFont("Segoe UI", 9))
-        self.sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        ll.addWidget(self.sub_lbl)
+        logo_lbl = QLabel("🦷 DentalApp")
+        logo_lbl.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
+        logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_lbl.setStyleSheet(f"color:{ACCENT}; letter-spacing:1px; background:transparent;")
+        ll.addWidget(logo_lbl)
+        sub_lbl = QLabel("Sistema de Gestión")
+        sub_lbl.setFont(QFont("Segoe UI", 9))
+        sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub_lbl.setStyleSheet(f"color:{MUTED}; background:transparent;")
+        ll.addWidget(sub_lbl)
         sb.addWidget(logo_f)
 
-        self.sep_sb = QFrame(); self.sep_sb.setFrameShape(QFrame.Shape.HLine)
-        self.sep_sb.setFixedHeight(1); sb.addWidget(self.sep_sb)
+        sep_sb = QFrame(); sep_sb.setFrameShape(QFrame.Shape.HLine)
+        sep_sb.setFixedHeight(1)
+        sep_sb.setStyleSheet(f"background:{BORDER}; border:none;")
+        sb.addWidget(sep_sb)
 
         nav_items = [
             ("🏠","Inicio",0), ("👥","Pacientes",1), ("📅","Citas",2),
@@ -269,16 +226,13 @@ class MainWindow(QMainWindow):
 
         sb.addStretch()
 
-        self.theme_btn = ThemeToggleButton()
-        sb.addWidget(self.theme_btn)
-
-        # Buscar actualizaciones
-        self.update_btn = QPushButton("  🔄  Actualizaciones")
-        self.update_btn.setFixedHeight(42)
-        self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.update_btn.setFont(QFont("Segoe UI", 11))
-        self.update_btn.clicked.connect(lambda: verificar_actualizacion(self, silencioso=False))
-        self.update_btn.setStyleSheet(f"""
+        # Botón actualizaciones
+        update_btn = QPushButton("  🔄  Actualizaciones")
+        update_btn.setFixedHeight(42)
+        update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        update_btn.setFont(QFont("Segoe UI", 11))
+        update_btn.clicked.connect(lambda: verificar_actualizacion(self, silencioso=False))
+        update_btn.setStyleSheet(f"""
             QPushButton {{
                 background:transparent; color:#8892A4;
                 border:none; border-radius:8px;
@@ -286,13 +240,15 @@ class MainWindow(QMainWindow):
             }}
             QPushButton:hover {{ color:white; background:rgba(255,255,255,0.08); }}
         """)
-        sb.addWidget(self.update_btn)
+        sb.addWidget(update_btn)
 
-        self.ver_lbl = QLabel("v1.1.6")
-        self.ver_lbl.setFont(QFont("Segoe UI", 10))
-        self.ver_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sb.addWidget(self.ver_lbl)
-        root.addWidget(self.sidebar)
+        from updater import VERSION_ACTUAL
+        ver_lbl = QLabel(f"v{VERSION_ACTUAL}")
+        ver_lbl.setFont(QFont("Segoe UI", 10))
+        ver_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ver_lbl.setStyleSheet(f"color:{MUTED}; background:transparent;")
+        sb.addWidget(ver_lbl)
+        root.addWidget(sidebar)
 
         # ── Stack ─────────────────────────────────────────────────────────────
         self.stack = QStackedWidget()
@@ -315,22 +271,6 @@ class MainWindow(QMainWindow):
         for i, btn in enumerate(self.nav_btns):
             btn.setChecked(i == idx)
 
-    def _apply_theme(self, _=None):
-        p = get_palette()
-        # Aplicar stylesheet global primero
-        QApplication.instance().setStyleSheet(app_stylesheet())
-        # Sidebar
-        self.sidebar.setStyleSheet(f"background:{p['SIDEBAR_BG']};")
-        self.logo_lbl.setStyleSheet(f"color:{p['ACCENT']}; letter-spacing:1px; background:transparent;")
-        self.sub_lbl.setStyleSheet(f"color:{p['MUTED']}; background:transparent;")
-        self.sep_sb.setStyleSheet(f"background:{p['BORDER']}; border:none;")
-        self.ver_lbl.setStyleSheet(f"color:{p['MUTED']}; background:transparent;")
-        # Stack / contenido
-        self.stack.setStyleSheet(f"background:{p['BG']};")
-        self.centralWidget().setStyleSheet(f"background:{p['BG']};")
-        # Forzar repintado de toda la ventana
-        self.update()
-        self.repaint()
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 def main():

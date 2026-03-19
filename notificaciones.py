@@ -22,7 +22,7 @@ from database.db_manager import get_connection
 
 # ── DB helper ─────────────────────────────────────────────────────────────────
 def get_citas_proximas(minutos_antes=60) -> list:
-
+    """Citas que empiezan en los próximos `minutos_antes` minutos y están pendientes/confirmadas."""
     conn = get_connection()
     cur  = conn.cursor()
     hoy  = date.today().strftime("%Y-%m-%d")
@@ -53,9 +53,12 @@ def get_citas_proximas(minutos_antes=60) -> list:
     return resultado
 
 
-# ── Windows toast notification ────────────────────────────────────────────────
-def notificar_windows(titulo: str, mensaje: str):
+# ── Notificación nativa (cross-platform) ─────────────────────────────────────
+def notificar_sistema(titulo: str, mensaje: str):
+    """Envía notificación nativa según el sistema operativo."""
+    import sys, subprocess
 
+    # Intentar con plyer (funciona en Windows y Mac)
     try:
         from plyer import notification
         notification.notify(
@@ -65,35 +68,43 @@ def notificar_windows(titulo: str, mensaje: str):
             timeout=10
         )
         return True
-    except ImportError:
-        pass
-
-    try:
-        from win10toast import ToastNotifier
-        toaster = ToastNotifier()
-        toaster.show_toast(titulo, mensaje, duration=8, threaded=True)
-        return True
-    except ImportError:
-        pass
-
-    # Fallback: usar PowerShell en Windows
-    try:
-        import subprocess
-        script = f"""
-        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-        $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-        $template.SelectSingleNode('//text[@id=1]').InnerText = '{titulo}'
-        $template.SelectSingleNode('//text[@id=2]').InnerText = '{mensaje}'
-        $notif = [Windows.UI.Notifications.ToastNotification]::new($template)
-        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('DentalApp').Show($notif)
-        """
-        subprocess.Popen(
-            ["powershell", "-WindowStyle", "Hidden", "-Command", script],
-            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
-        )
-        return True
     except Exception:
-        return False
+        pass
+
+    # Mac — usar osascript
+    if sys.platform == "darwin":
+        try:
+            subprocess.Popen([
+                "osascript", "-e",
+                f'display notification "{mensaje}" with title "{titulo}"'
+            ])
+            return True
+        except Exception:
+            pass
+
+    # Windows — usar PowerShell
+    elif sys.platform == "win32":
+        try:
+            script = f"""
+            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+            $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+            $template.SelectSingleNode('//text[@id=1]').InnerText = '{titulo}'
+            $template.SelectSingleNode('//text[@id=2]').InnerText = '{mensaje}'
+            $notif = [Windows.UI.Notifications.ToastNotification]::new($template)
+            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('DentalApp').Show($notif)
+            """
+            subprocess.Popen(
+                ["powershell", "-WindowStyle", "Hidden", "-Command", script],
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+            )
+            return True
+        except Exception:
+            pass
+
+    return False
+
+# Alias para compatibilidad
+notificar_windows = notificar_sistema
 
 
 # ── In-app popup notification ─────────────────────────────────────────────────

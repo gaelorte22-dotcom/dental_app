@@ -1,114 +1,28 @@
 """
 theme.py
-Sistema de temas claro/oscuro para DentalApp.
+Paleta de colores y stylesheet global de DentalApp.
 """
 
-
-class ThemeManager:
-    def __init__(self):
-        self._mode = "light"
-        self._listeners = []
-
-    def toggle(self):
-        self._mode = "dark" if self._mode == "light" else "light"
-        for fn in self._listeners:
-            try:
-                fn(self._mode)
-            except Exception:
-                pass
-
-    def connect(self, fn):
-        """Registra un callback que se llama cuando cambia el tema."""
-        if fn not in self._listeners:
-            self._listeners.append(fn)
-
-    def disconnect(self, fn):
-        self._listeners = [f for f in self._listeners if f != fn]
-
-    def is_dark(self):
-        return self._mode == "dark"
-
-    @property
-    def mode(self):
-        return self._mode
-
-
-# Singleton global — se crea una sola vez al importar
-theme = ThemeManager()
-
-
+# Paleta fija (modo claro)
 def get_palette():
-    if theme.is_dark():
-        return {
-            "PRIMARY":    "#4ECDC4",
-            "SECONDARY":  "#45B7AA",
-            "ACCENT":     "#4ECDC4",
-            "BG":         "#1A1A2E",
-            "CARD":       "#16213E",
-            "TEXT":       "#E8EAF0",
-            "MUTED":      "#8892A4",
-            "DANGER":     "#FF6B6B",
-            "SUCCESS":    "#51CF66",
-            "WARNING":    "#FFD43B",
-            "BORDER":     "#2D3561",
-            "SIDEBAR_BG": "#0F0F1A",
-            "SIDEBAR_HVR":"#1A1A2E",
-            "SIDEBAR_ACT":"#4ECDC4",
-            "SIDEBAR_TXT":"#E8EAF0",
-            "INPUT_BG":   "#0F0F1A",
-        }
-    else:
-        return {
-            "PRIMARY":    "#1A6B8A",
-            "SECONDARY":  "#2196B0",
-            "ACCENT":     "#4ECDC4",
-            "BG":         "#F5F8FA",
-            "CARD":       "#FFFFFF",
-            "TEXT":       "#2C3E50",
-            "MUTED":      "#7F8C8D",
-            "DANGER":     "#E74C3C",
-            "SUCCESS":    "#27AE60",
-            "WARNING":    "#F39C12",
-            "BORDER":     "#DEE4E8",
-            "SIDEBAR_BG": "#0F3D52",
-            "SIDEBAR_HVR":"#1A6B8A",
-            "SIDEBAR_ACT":"#2196B0",
-            "SIDEBAR_TXT":"#FFFFFF",
-            "INPUT_BG":   "#FFFFFF",
-        }
-
-
-def app_stylesheet():
-    p = get_palette()
-    return f"""
-        QMainWindow, QWidget {{
-            background: {p['BG']};
-            color: {p['TEXT']};
-        }}
-        QLabel {{
-            background: transparent;
-            color: {p['TEXT']};
-        }}
-        QScrollBar:vertical {{
-            background: {p['BG']}; width: 8px; border-radius: 4px;
-        }}
-        QScrollBar::handle:vertical {{
-            background: {p['BORDER']}; border-radius: 4px; min-height: 30px;
-        }}
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-            height: 0px;
-        }}
-        QScrollBar:horizontal {{
-            background: {p['BG']}; height: 8px; border-radius: 4px;
-        }}
-        QScrollBar::handle:horizontal {{
-            background: {p['BORDER']}; border-radius: 4px;
-        }}
-        QToolTip {{
-            background: {p['CARD']}; color: {p['TEXT']};
-            border: 1px solid {p['BORDER']}; padding: 4px; font-size: 12px;
-        }}
-    """
+    return {
+        "PRIMARY":    "#1A6B8A",
+        "SECONDARY":  "#2196B0",
+        "ACCENT":     "#4ECDC4",
+        "BG":         "#F5F8FA",
+        "CARD":       "#FFFFFF",
+        "TEXT":       "#2C3E50",
+        "MUTED":      "#7F8C8D",
+        "DANGER":     "#E74C3C",
+        "SUCCESS":    "#27AE60",
+        "WARNING":    "#F39C12",
+        "BORDER":     "#DEE4E8",
+        "SIDEBAR_BG": "#0F3D52",
+        "SIDEBAR_HVR":"#1A6B8A",
+        "SIDEBAR_ACT":"#2196B0",
+        "SIDEBAR_TXT":"#FFFFFF",
+        "INPUT_BG":   "#FFFFFF",
+    }
 
 
 def app_stylesheet():
@@ -119,19 +33,91 @@ def app_stylesheet():
         QLabel    {{ background:transparent; color:{p['TEXT']}; }}
         QScrollArea {{ background:transparent; border:none; }}
         QScrollArea > QWidget > QWidget {{ background:transparent; }}
+
+        /* ── Inputs ── */
+        QLineEdit, QTextEdit, QPlainTextEdit {{
+            background:{p['INPUT_BG']}; color:{p['TEXT']};
+            border:1.5px solid {p['BORDER']}; border-radius:8px;
+            padding:7px 10px; font-size:13px;
+        }}
+        QLineEdit:focus, QTextEdit:focus {{ border-color:{p['SECONDARY']}; }}
+
+        QComboBox {{
+            background:{p['INPUT_BG']}; color:{p['TEXT']};
+            border:1.5px solid {p['BORDER']}; border-radius:8px;
+            padding:7px 10px; font-size:13px;
+        }}
+        QComboBox QAbstractItemView {{
+            background:{p['CARD']}; color:{p['TEXT']};
+            selection-background-color:{p['PRIMARY']};
+        }}
+
+        QSpinBox, QDoubleSpinBox {{
+            background:{p['INPUT_BG']}; color:{p['TEXT']};
+            border:1.5px solid {p['BORDER']}; border-radius:8px;
+            padding:7px 10px; font-size:13px;
+        }}
+
+        QDateEdit {{
+            background:{p['INPUT_BG']}; color:{p['TEXT']};
+            border:1.5px solid {p['BORDER']}; border-radius:8px;
+            padding:7px 10px; font-size:13px;
+        }}
+
+        /* ── Tablas ── */
+        QTableWidget {{
+            background:{p['CARD']}; color:{p['TEXT']};
+            border:1px solid {p['BORDER']}; border-radius:10px;
+            gridline-color:{p['BORDER']};
+        }}
+        QTableWidget::item {{ color:{p['TEXT']}; padding:8px; }}
+        QTableWidget::item:alternate {{ background:{p['BG']}; }}
+        QTableWidget::item:selected {{
+            background:{p['PRIMARY']}; color:white;
+        }}
+        QHeaderView::section {{
+            background:{p['PRIMARY']}; color:white;
+            padding:9px; font-weight:700; border:none;
+        }}
+
+        /* ── Tabs ── */
+        QTabWidget::pane {{ border:none; background:{p['BG']}; }}
+        QTabBar::tab {{
+            background:{p['BG']}; color:{p['MUTED']};
+            padding:9px 20px; font-size:13px; font-weight:600;
+            border-radius:0; margin-right:2px;
+            border-bottom:2px solid transparent;
+        }}
+        QTabBar::tab:selected {{
+            color:{p['PRIMARY']}; border-bottom:3px solid {p['PRIMARY']};
+            background:{p['CARD']};
+        }}
+        QTabBar::tab:hover {{ color:{p['TEXT']}; }}
+
+        /* ── Scrollbar Vertical — SIEMPRE VISIBLE ── */
         QScrollBar:vertical {{
-            background:{p['BG']}; width:8px; border-radius:4px;
+            background:{p['BORDER']}; width:10px;
+            border-radius:5px; margin:0;
         }}
         QScrollBar::handle:vertical {{
-            background:{p['BORDER']}; border-radius:4px; min-height:30px;
+            background:{p['PRIMARY']}; border-radius:5px; min-height:30px;
         }}
+        QScrollBar::handle:vertical:hover {{ background:{p['SECONDARY']}; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0px; }}
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background:transparent; }}
+
+        /* ── Scrollbar Horizontal — SIEMPRE VISIBLE ── */
         QScrollBar:horizontal {{
-            background:{p['BG']}; height:8px; border-radius:4px;
+            background:{p['BORDER']}; height:10px;
+            border-radius:5px; margin:0;
         }}
         QScrollBar::handle:horizontal {{
-            background:{p['BORDER']}; border-radius:4px;
+            background:{p['PRIMARY']}; border-radius:5px; min-width:30px;
         }}
+        QScrollBar::handle:horizontal:hover {{ background:{p['SECONDARY']}; }}
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width:0px; }}
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background:transparent; }}
+
         QToolTip {{
             background:{p['CARD']}; color:{p['TEXT']};
             border:1px solid {p['BORDER']}; padding:4px; font-size:12px;

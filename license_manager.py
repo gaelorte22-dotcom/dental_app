@@ -24,11 +24,13 @@ import platform
 _SECRET = os.environ.get("APP_SECRET", "DentalApp2026-X9k#mZqLpR").encode()
 
 def _get_app_data_dir():
-    if os.name == 'nt':
-        base = os.environ.get('APPDATA', os.path.expanduser('~'))
+    if sys.platform == "win32" or os.name == "nt":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    elif sys.platform == "darwin":
+        base = os.path.join(os.path.expanduser("~"), "Library", "Application Support")
     else:
-        base = os.path.expanduser('~')
-    app_dir = os.path.join(base, 'DentalApp')
+        base = os.path.expanduser("~")
+    app_dir = os.path.join(base, "DentalApp")
     os.makedirs(app_dir, exist_ok=True)
     return app_dir
 

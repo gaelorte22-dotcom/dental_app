@@ -1,14 +1,17 @@
 import sqlite3
 import os
+import sys
 from datetime import datetime
 
-# Carpeta persistente en AppData (Windows) o ~/.dentalapp (Mac/Linux)
+# Carpeta persistente cross-platform
 def _get_app_data_dir():
-    if os.name == 'nt':  # Windows
-        base = os.environ.get('APPDATA', os.path.expanduser('~'))
-    else:  # Mac / Linux
-        base = os.path.expanduser('~')
-    app_dir = os.path.join(base, 'DentalApp')
+    if sys.platform == "win32" or os.name == "nt":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    elif sys.platform == "darwin":
+        base = os.path.join(os.path.expanduser("~"), "Library", "Application Support")
+    else:
+        base = os.path.expanduser("~")
+    app_dir = os.path.join(base, "DentalApp")
     os.makedirs(app_dir, exist_ok=True)
     return app_dir
 

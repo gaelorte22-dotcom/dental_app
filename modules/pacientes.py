@@ -239,9 +239,18 @@ class PacientesWidget(QWidget):
         self.table.setHorizontalHeaderLabels([
             "ID", "Nombre", "Apellido", "Teléfono", "Email", "Registro", "Acciones"
         ])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table.horizontalHeader().setMinimumSectionSize(80)
+        self.table.setColumnWidth(0, 50)
+        self.table.setColumnWidth(1, 150)
+        self.table.setColumnWidth(2, 150)
+        self.table.setColumnWidth(3, 130)
+        self.table.setColumnWidth(4, 200)
+        self.table.setColumnWidth(5, 120)
+        self.table.setColumnWidth(6, 100)
+        self.table.horizontalHeader().setStretchLastSection(False)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -316,6 +325,24 @@ class PacientesWidget(QWidget):
             msg.setText("Paciente registrado correctamente.")
             msg.setStyleSheet("color: black; background: white;")
             msg.exec()
+
+    def _ver_expediente(self, pid: int):
+        from database.db_manager import obtener_paciente_por_id as _get_pac
+        p = _get_pac(pid)
+        if not p:
+            return
+        # Buscar el ExpedientesWidget en el stack del padre
+        parent = self.parent()
+        while parent:
+            if hasattr(parent, 'stack'):
+                # Cambiar al módulo de expedientes (índice 3)
+                parent._switch(3)
+                # Abrir directamente el expediente del paciente
+                exp_widget = parent.stack.widget(3)
+                if hasattr(exp_widget, 'mostrar_expediente'):
+                    exp_widget.mostrar_expediente(dict(p))
+                break
+            parent = parent.parent()
 
     def _editar(self, pid: int):
         p = obtener_paciente_por_id(pid)
