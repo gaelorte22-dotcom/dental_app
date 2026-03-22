@@ -1,1 +1,1 @@
-periontograma completo y scroll bar visible siempre  
+Actualizacion en windows de forma automatica y en macbook hacer instalacion manual con las instrucciones 
