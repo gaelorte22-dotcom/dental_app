@@ -1,9 +1,7 @@
-"""
-theme.py
-Paleta de colores y stylesheet global de DentalApp.
-"""
+# Colores y estilos globales de la app.
+# Si se necesita cambiar la paleta, hacerlo aqui para que afecte todo.
 
-# Paleta fija (modo claro)
+
 def get_palette():
     return {
         "PRIMARY":    "#1A6B8A",
@@ -34,7 +32,6 @@ def app_stylesheet():
         QScrollArea {{ background:transparent; border:none; }}
         QScrollArea > QWidget > QWidget {{ background:transparent; }}
 
-        /* ── Inputs ── */
         QLineEdit, QTextEdit, QPlainTextEdit {{
             background:{p['INPUT_BG']}; color:{p['TEXT']};
             border:1.5px solid {p['BORDER']}; border-radius:8px;
@@ -64,7 +61,6 @@ def app_stylesheet():
             padding:7px 10px; font-size:13px;
         }}
 
-        /* ── Tablas ── */
         QTableWidget {{
             background:{p['CARD']}; color:{p['TEXT']};
             border:1px solid {p['BORDER']}; border-radius:10px;
@@ -72,15 +68,12 @@ def app_stylesheet():
         }}
         QTableWidget::item {{ color:{p['TEXT']}; padding:8px; }}
         QTableWidget::item:alternate {{ background:{p['BG']}; }}
-        QTableWidget::item:selected {{
-            background:{p['PRIMARY']}; color:white;
-        }}
+        QTableWidget::item:selected {{ background:{p['PRIMARY']}; color:white; }}
         QHeaderView::section {{
             background:{p['PRIMARY']}; color:white;
             padding:9px; font-weight:700; border:none;
         }}
 
-        /* ── Tabs ── */
         QTabWidget::pane {{ border:none; background:{p['BG']}; }}
         QTabBar::tab {{
             background:{p['BG']}; color:{p['MUTED']};
@@ -94,7 +87,6 @@ def app_stylesheet():
         }}
         QTabBar::tab:hover {{ color:{p['TEXT']}; }}
 
-        /* ── Scrollbar Vertical — SIEMPRE VISIBLE ── */
         QScrollBar:vertical {{
             background:{p['BORDER']}; width:12px;
             border-radius:6px; margin:0;
@@ -106,7 +98,6 @@ def app_stylesheet():
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0px; border:none; }}
         QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background:transparent; }}
 
-        /* ── Scrollbar Horizontal — SIEMPRE VISIBLE ── */
         QScrollBar:horizontal {{
             background:{p['BORDER']}; height:12px;
             border-radius:6px; margin:0;
@@ -118,7 +109,6 @@ def app_stylesheet():
         QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width:0px; border:none; }}
         QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background:transparent; }}
 
-        /* Forzar scroll en áreas de scroll */
         QScrollArea {{ border:none; background:transparent; }}
         QAbstractScrollArea {{ border:none; }}
         QAbstractScrollArea::corner {{ background:{p['BORDER']}; }}

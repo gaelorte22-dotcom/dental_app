@@ -23,7 +23,8 @@ from PyQt6.QtGui import QFont
 # ── Configuración ─────────────────────────────────────────────────────────────
 GITHUB_USER = "gaelorte22-dotcom"
 GITHUB_REPO = "dental_app"
-VERSION_ACTUAL = "1.2.0"
+VERSION_ACTUAL = "1.0.0"
+
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
 
 PRIMARY  = "#1A6B8A"
@@ -101,9 +102,11 @@ class UpdateChecker:
             print(f"[Updater] Verificando actualizaciones... URL: {API_URL}")
             req = urllib.request.Request(
                 API_URL,
-                headers={"User-Agent": "DentalApp-Updater"}
+                headers={
+                    "User-Agent": "DentalApp-Updater",
+                    "Authorization": f"Bearer {GITHUB_TOKEN}"
+                }
             )
-                
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode())
 
@@ -170,8 +173,19 @@ class Downloader:
 
     def _run(self):
         try:
-            dest = os.path.join(os.path.expanduser("~"), "Downloads", self.nombre)
-            req  = urllib.request.Request(
+            from datetime import datetime
+            nombre = self.nombre.strip() if self.nombre else "DentalApp_update.exe"
+
+            # Carpeta de descargas
+            downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+            os.makedirs(downloads, exist_ok=True)
+
+            # Usar timestamp para evitar conflicto con archivo anterior
+            base, ext = os.path.splitext(nombre)
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dest = os.path.join(downloads, f"{base}_{ts}{ext}")
+
+            req = urllib.request.Request(
                 self.url,
                 headers={"User-Agent": "DentalApp-Updater"}
             )
@@ -329,35 +343,53 @@ class UpdateDialog(QDialog):
 
     def _on_progreso(self, val):
         self.progress.setValue(val)
-        self.status_lbl.setText(f"Descargando… {val}%")
+        self.status_lbl.setText(f"Descargando... {val}%")
 
     def _on_completado(self, ruta):
-        self.status_lbl.setText(f"✅ Descargado en: {ruta}")
-        self.dl_btn.setText("✅  Descargado")
+        self.dl_btn.setText("Descargado")
 
         if sys.platform == "win32":
-            # En Windows — ejecutar el instalador directamente
-            self.status_lbl.setText("Abriendo instalador…")
+            self.status_lbl.setText("Abriendo instalador...")
             QTimer.singleShot(1000, lambda: self._instalar(ruta))
         elif sys.platform == "darwin":
-            # En Mac — abrir la carpeta de descargas
+            import subprocess
+            # Descomprimir el zip automaticamente
+            try:
+                subprocess.Popen(["unzip", "-o", ruta, "-d", os.path.dirname(ruta)])
+            except Exception:
+                pass
+            # Abrir la carpeta Downloads para que el cliente vea el archivo
             subprocess.Popen(["open", os.path.dirname(ruta)])
-            self.status_lbl.setText("Abre el .zip en tu carpeta Descargas")
+            self.status_lbl.setText(
+                "Descargado en tu carpeta Downloads.\n"
+                "1. Abre la carpeta Downloads\n"
+                "2. Arrastra DentalApp a Aplicaciones\n"
+                "3. Abre la nueva version"
+            )
+            self.status_lbl.setWordWrap(True)
+            self.skip_btn.setEnabled(True)
+            self.skip_btn.setText("Cerrar")
+        else:
+            self.status_lbl.setText(f"Descargado en: {ruta}")
             self.skip_btn.setEnabled(True)
             self.skip_btn.setText("Cerrar")
 
     def _instalar(self, ruta):
-        """Ejecuta el nuevo instalador y cierra la app actual."""
         try:
-            subprocess.Popen([ruta])
+            if sys.platform == "win32":
+                # ShellExecute con "runas" pide elevacion de administrador si es necesario
+                import ctypes
+                ctypes.windll.shell32.ShellExecuteW(None, "runas", ruta, None, None, 1)
+            else:
+                subprocess.Popen([ruta])
             sys.exit(0)
         except Exception as e:
             self._on_error(str(e))
 
     def _on_error(self, msg):
-        self.status_lbl.setText(f"❌ Error: {msg}")
+        self.status_lbl.setText(f"Error: {msg}")
         self.dl_btn.setEnabled(True)
-        self.dl_btn.setText("⬇️  Reintentar")
+        self.dl_btn.setText("Reintentar")
         self.skip_btn.setEnabled(True)
 
 
@@ -371,7 +403,6 @@ def verificar_actualizacion(parent=None, silencioso=True):
     checker = UpdateChecker()
 
     def on_update(info):
-        print(f"[Updater] ¡Actualización encontrada! Mostrando popup...")
         dlg = UpdateDialog(info, parent)
         dlg.exec()
 
