@@ -4,9 +4,9 @@
 ; =====================================================
 
 #define AppName      "DentalApp"
-#define AppVersion 1.1.0
-#define AppPublisher "Tu Nombre / Consultorio"
-#define AppURL       "https://tuwebsite.com"
+#define AppVersion   "1.2.4"
+#define AppPublisher "DentalApp"
+#define AppURL       "https://github.com/gaelorte22-dotcom/dental_app"
 #define AppExeName   "DentalApp.exe"
 #define AppICO       "diente.ico"
 
