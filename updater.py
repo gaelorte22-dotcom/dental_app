@@ -23,7 +23,7 @@ from PyQt6.QtGui import QFont
 # ── Configuración ─────────────────────────────────────────────────────────────
 GITHUB_USER = "gaelorte22-dotcom"
 GITHUB_REPO = "dental_app"
-VERSION_ACTUAL = "1.2.1"
+VERSION_ACTUAL = "1.0.0"
 
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
 
@@ -117,10 +117,16 @@ class UpdateChecker:
                 asset_url = None; asset_name = None
 
                 if sys.platform == "win32":
+                    # Buscar primero el instalador Setup, si no existe usar el .exe directo
                     for a in assets:
-                        if a["name"].endswith(".exe"):
+                        if "Setup" in a["name"] and a["name"].endswith(".exe"):
                             asset_url = a["browser_download_url"]
                             asset_name = a["name"]; break
+                    if not asset_url:
+                        for a in assets:
+                            if a["name"].endswith(".exe"):
+                                asset_url = a["browser_download_url"]
+                                asset_name = a["name"]; break
                 elif sys.platform == "darwin":
                     for a in assets:
                         if "Mac" in a["name"] and a["name"].endswith(".zip"):
@@ -377,12 +383,14 @@ class UpdateDialog(QDialog):
     def _instalar(self, ruta):
         try:
             if sys.platform == "win32":
-                # ShellExecute con "runas" pide elevacion de administrador si es necesario
-                import ctypes
-                ctypes.windll.shell32.ShellExecuteW(None, "runas", ruta, None, None, 1)
+                import os
+                # Usar os.startfile que es la forma mas confiable en Windows
+                # para ejecutar un instalador .exe con los permisos correctos
+                os.startfile(ruta)
+                QTimer.singleShot(500, lambda: sys.exit(0))
             else:
                 subprocess.Popen([ruta])
-            sys.exit(0)
+                sys.exit(0)
         except Exception as e:
             self._on_error(str(e))
 

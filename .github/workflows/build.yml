@@ -59,11 +59,16 @@ jobs:
             --hidden-import="app_utils" `
             main.py
 
-      - name: Subir .exe como artefacto
+      - name: Compilar instalador con Inno Setup
+        run: |
+          choco install innosetup --no-progress -y
+          iscc installer.iss
+
+      - name: Subir instalador como artefacto
         uses: actions/upload-artifact@v4
         with:
           name: DentalApp-Windows
-          path: dist/DentalApp.exe
+          path: dist/installer/DentalApp_Setup_*.exe
 
   # ── Build Mac ────────────────────────────────────────────────────────────────
   build-mac:
