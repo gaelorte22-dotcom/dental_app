@@ -4,8 +4,8 @@
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 AppName=DentalApp
-AppVersion=1.2.7.1
-AppVerName=DentalApp v1.2.7.1
+AppVersion=1.2.8.1
+AppVerName=DentalApp v1.2.8.1
 AppPublisher=DentalApp
 AppPublisherURL=https://github.com/gaelorte22-dotcom/dental_app
 AppSupportURL=https://github.com/gaelorte22-dotcom/dental_app
@@ -14,7 +14,7 @@ DefaultDirName={autopf}\DentalApp
 DefaultGroupName=DentalApp
 DisableProgramGroupPage=yes
 OutputDir=dist\installer
-OutputBaseFilename=DentalApp_Setup_v1.2.7.1
+OutputBaseFilename=DentalApp_Setup_v1.2.8.1
 SetupIconFile=diente.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
