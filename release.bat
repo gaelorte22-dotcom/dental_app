@@ -34,7 +34,9 @@ powershell -Command "(Get-Content main.py) -replace 'QLabel\(\"v[0-9]+\.[0-9]+\.
 powershell -Command "(Get-Content main.py) -replace 'DentalApp v[0-9]+\.[0-9]+\.[0-9]+', 'DentalApp v%VERSION%' | Set-Content main.py"
 
 :: Actualizar version en installer.iss
-powershell -Command "(Get-Content installer.iss) -replace '#define AppVersion\s+"".*""', '#define AppVersion   ""%VERSION%""' | Set-Content installer.iss"
+powershell -Command "(Get-Content installer.iss) -replace 'AppVersion=[0-9]+\.[0-9]+\.[0-9]+', 'AppVersion=%VERSION%' | Set-Content installer.iss"
+powershell -Command "(Get-Content installer.iss) -replace 'AppVerName=DentalApp v[0-9]+\.[0-9]+\.[0-9]+', 'AppVerName=DentalApp v%VERSION%' | Set-Content installer.iss"
+powershell -Command "(Get-Content installer.iss) -replace 'OutputBaseFilename=DentalApp_Setup_v[0-9]+\.[0-9]+\.[0-9]+', 'OutputBaseFilename=DentalApp_Setup_v%VERSION%' | Set-Content installer.iss"
 
 :: Guardar novedades en archivo temporal para el release
 echo %NOVEDADES% > RELEASE_NOTES.txt
