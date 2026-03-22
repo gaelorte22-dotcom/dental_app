@@ -19,8 +19,7 @@ from PyQt6.QtGui import QFont
 
 GITHUB_USER   = "gaelorte22-dotcom"
 GITHUB_REPO   = "dental_app"
-VERSION_ACTUAL = "1.2.8"
-GITHUB_TOKEN  = ""  # se asigna desde main o queda vacio si el repo es publico
+VERSION_ACTUAL = "1.2.9"
 
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
 
@@ -50,9 +49,13 @@ def _btn(label, color, hover, text_color="white", w=None):
 
 def _version_mayor(v1: str, v2: str) -> bool:
     try:
-        t1 = tuple(int(x) for x in v1.lstrip("v").split("."))
-        t2 = tuple(int(x) for x in v2.lstrip("v").split("."))
-        return t1 > t2
+        def normalizar(v):
+            partes = v.lstrip("v").split(".")
+            # Rellenar con ceros para comparar versiones de diferente longitud
+            while len(partes) < 4:
+                partes.append("0")
+            return tuple(int(x) for x in partes[:4])
+        return normalizar(v1) > normalizar(v2)
     except Exception:
         return False
 
@@ -95,11 +98,10 @@ class UpdateChecker:
 
     def _run(self):
         try:
-            headers = {"User-Agent": "DentalApp-Updater"}
-            if GITHUB_TOKEN:
-                headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
-
-            req = urllib.request.Request(API_URL, headers=headers)
+            req = urllib.request.Request(
+                API_URL,
+                headers={"User-Agent": "DentalApp-Updater"}
+            )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode())
 
