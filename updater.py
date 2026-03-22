@@ -19,7 +19,7 @@ from PyQt6.QtGui import QFont
 
 GITHUB_USER   = "gaelorte22-dotcom"
 GITHUB_REPO   = "dental_app"
-VERSION_ACTUAL = "1.2.7.1"
+VERSION_ACTUAL = "1.2.8"
 GITHUB_TOKEN  = ""  # se asigna desde main o queda vacio si el repo es publico
 
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
