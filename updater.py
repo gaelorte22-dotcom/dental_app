@@ -23,7 +23,7 @@ from PyQt6.QtGui import QFont
 # ── Configuración ─────────────────────────────────────────────────────────────
 GITHUB_USER = "gaelorte22-dotcom"
 GITHUB_REPO = "dental_app"
-VERSION_ACTUAL = "1.2.1"
+VERSION_ACTUAL = "1.2.3"
 
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
 
@@ -358,21 +358,49 @@ class UpdateDialog(QDialog):
             self.status_lbl.setText("Abriendo instalador...")
             QTimer.singleShot(1000, lambda: self._instalar(ruta))
         elif sys.platform == "darwin":
-            import subprocess
-            # Descomprimir el zip automaticamente
+            import subprocess, zipfile
             try:
-                subprocess.Popen(["unzip", "-o", ruta, "-d", os.path.dirname(ruta)])
-            except Exception:
-                pass
-            # Abrir la carpeta Downloads para que el cliente vea el archivo
-            subprocess.Popen(["open", os.path.dirname(ruta)])
-            self.status_lbl.setText(
-                "Descargado en tu carpeta Downloads.\n"
-                "1. Abre la carpeta Downloads\n"
-                "2. Arrastra DentalApp a Aplicaciones\n"
-                "3. Abre la nueva version"
-            )
-            self.status_lbl.setWordWrap(True)
+                # Descomprimir el zip en Downloads
+                extract_dir = os.path.join(os.path.dirname(ruta), "DentalApp_update")
+                os.makedirs(extract_dir, exist_ok=True)
+                with zipfile.ZipFile(ruta, 'r') as z:
+                    z.extractall(extract_dir)
+
+                # Buscar el .app descomprimido
+                app_origen = None
+                for item in os.listdir(extract_dir):
+                    if item.endswith(".app") or item == "DentalApp":
+                        app_origen = os.path.join(extract_dir, item)
+                        break
+
+                if app_origen:
+                    # Copiar a /Applications con osascript para pedir permisos
+                    script = f'''
+                    do shell script "cp -R '{app_origen}' '/Applications/DentalApp'" with administrator privileges
+                    '''
+                    subprocess.Popen(["osascript", "-e", script])
+                    self.status_lbl.setText(
+                        "Instalando actualizacion...\n"
+                        "Ingresa tu contrasena si se solicita.\n"
+                        "La app se cerrara y abrira la nueva version."
+                    )
+                    self.status_lbl.setWordWrap(True)
+                    # Abrir la nueva version y cerrar la actual
+                    QTimer.singleShot(3000, lambda: self._abrir_nueva_mac())
+                else:
+                    raise Exception("No se encontro la app descomprimida")
+
+            except Exception as e:
+                # Si falla el automatico, mostrar instrucciones manuales
+                subprocess.Popen(["open", os.path.dirname(ruta)])
+                self.status_lbl.setText(
+                    "Descargado en Downloads.\n"
+                    "1. Descomprime DentalApp-Mac.zip\n"
+                    "2. Arrastra DentalApp a Aplicaciones\n"
+                    "3. Abre la nueva version"
+                )
+                self.status_lbl.setWordWrap(True)
+
             self.skip_btn.setEnabled(True)
             self.skip_btn.setText("Cerrar")
         else:
@@ -384,8 +412,6 @@ class UpdateDialog(QDialog):
         try:
             if sys.platform == "win32":
                 import os
-                # Usar os.startfile que es la forma mas confiable en Windows
-                # para ejecutar un instalador .exe con los permisos correctos
                 os.startfile(ruta)
                 QTimer.singleShot(500, lambda: sys.exit(0))
             else:
@@ -393,6 +419,14 @@ class UpdateDialog(QDialog):
                 sys.exit(0)
         except Exception as e:
             self._on_error(str(e))
+
+    def _abrir_nueva_mac(self):
+        try:
+            import subprocess
+            subprocess.Popen(["open", "/Applications/DentalApp"])
+            sys.exit(0)
+        except Exception:
+            sys.exit(0)
 
     def _on_error(self, msg):
         self.status_lbl.setText(f"Error: {msg}")
