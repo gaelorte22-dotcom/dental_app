@@ -58,7 +58,7 @@ jobs:
             --hidden-import="notificaciones" `
             --hidden-import="app_utils" `
             main.py
- 
+
       - name: Compilar instalador con Inno Setup
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
@@ -173,7 +173,7 @@ jobs:
             3. Click derecho sobre `DentalApp` → **Abrir**
             4. Si aparece aviso de seguridad → Abrir de todas formas
           files: |
-            artifacts/windows/DentalApp.exe
+            artifacts/windows/DentalApp_Setup_*.exe
             artifacts/mac/DentalApp-Mac.zip
           draft: false
           prerelease: false
