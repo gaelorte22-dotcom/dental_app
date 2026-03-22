@@ -24,16 +24,16 @@ from updater import verificar_actualizacion, VERSION_ACTUAL
 
 # Frases que se muestran al abrir la app, se elige una al azar
 _FRASES = [
-    "Que tengas un increible turno",
-    "Cada sonrisa que cuidas hace la diferencia",
-    "Hoy es un gran dia para hacer grandes cosas",
-    "Tu trabajo cambia la vida de tus pacientes",
-    "Un dia mas, una sonrisa mas",
-    "El exito es la suma de pequenos esfuerzos diarios",
-    "Hoy vas a dejar huella en tu consultorio",
-    "La excelencia no es un acto, es un habito",
-    "Cada paciente confia en ti",
-    "Dia nuevo, energia nueva, sonrisas nuevas",
+    "Que tengas un increíble turno 🦷✨",
+    "Cada sonrisa que cuidas hace la diferencia 😊",
+    "Hoy es un gran día para hacer grandes cosas 💪",
+    "Tu trabajo cambia la vida de tus pacientes 🌟",
+    "Un día más, una sonrisa más 🦷❤️",
+    "El éxito es la suma de pequeños esfuerzos diarios 🚀",
+    "Hoy vas a dejar huella en tu consultorio 👊",
+    "La excelencia no es un acto, es un hábito ⭐",
+    "Cada paciente confía en ti — ¡a la altura! 🏆",
+    "Día nuevo, energía nueva, sonrisas nuevas ✨",
 ]
 
 _MESES = ["","enero","febrero","marzo","abril","mayo","junio",
@@ -86,9 +86,9 @@ class HomeWidget(QWidget):
         root.setSpacing(22)
 
         hora = QTime.currentTime().hour()
-        if hora < 12:   saludo = "Buenos dias"
-        elif hora < 18: saludo = "Buenas tardes"
-        else:           saludo = "Buenas noches"
+        if hora < 12:   saludo = "☀️  ¡Buenos días!"
+        elif hora < 18: saludo = "🌤  ¡Buenas tardes!"
+        else:           saludo = "🌙  ¡Buenas noches!"
 
         greet = QLabel(saludo)
         greet.setFont(QFont("Segoe UI", 26, QFont.Weight.Bold))
@@ -123,13 +123,13 @@ class HomeWidget(QWidget):
         grid = QGridLayout()
         grid.setSpacing(16)
         cards = [
-            ("Pacientes",   "Ver y gestionar pacientes", PRIMARY,   1),
-            ("Citas",       "Agenda del consultorio",    SECONDARY, 2),
-            ("Expedientes", "Historial clinico",         "#27AE60", 3),
-            ("Facturacion", "Cobros y pagos",            "#8E44AD", 4),
+            ("👥", "Pacientes",   "Ver y gestionar pacientes", PRIMARY,   1),
+            ("📅", "Citas",       "Agenda del consultorio",    SECONDARY, 2),
+            ("🦷", "Expedientes", "Historial clínico",         "#27AE60", 3),
+            ("💰", "Facturación", "Cobros y pagos",            "#8E44AD", 4),
         ]
-        for i, (title, desc, color, page) in enumerate(cards):
-            card = self._make_card(title, desc, color, page)
+        for i, (icon, title, desc, color, page) in enumerate(cards):
+            card = self._make_card(icon, title, desc, color, page)
             grid.addWidget(card, i // 2, i % 2)
         root.addLayout(grid)
         root.addStretch()
@@ -139,7 +139,7 @@ class HomeWidget(QWidget):
         footer.setStyleSheet(f"color:{MUTED}; font-size:11px; background:transparent;")
         root.addWidget(footer)
 
-    def _make_card(self, title, desc, color, page):
+    def _make_card(self, icon, title, desc, color, page):
         card = QWidget()
         card.setFixedHeight(120)
         card.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -156,6 +156,11 @@ class HomeWidget(QWidget):
         cl = QVBoxLayout(card)
         cl.setContentsMargins(20, 16, 20, 16)
         cl.setSpacing(6)
+
+        il = QLabel(icon)
+        il.setFont(QFont("Segoe UI", 26))
+        il.setStyleSheet("border:none; background:transparent;")
+        cl.addWidget(il)
 
         tl = QLabel(title)
         tl.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
@@ -207,12 +212,12 @@ class MainWindow(QMainWindow):
         logo_f.setStyleSheet("background:transparent;")
         ll = QVBoxLayout(logo_f)
         ll.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_lbl = QLabel("DentalApp")
+        logo_lbl = QLabel("🦷 DentalApp")
         logo_lbl.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
         logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_lbl.setStyleSheet(f"color:{ACCENT}; letter-spacing:1px; background:transparent;")
         ll.addWidget(logo_lbl)
-        sub_lbl = QLabel("Sistema de Gestion")
+        sub_lbl = QLabel("Sistema de Gestión")
         sub_lbl.setFont(QFont("Segoe UI", 9))
         sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sub_lbl.setStyleSheet(f"color:{MUTED}; background:transparent;")
@@ -226,22 +231,22 @@ class MainWindow(QMainWindow):
         sb.addWidget(sep_sb)
 
         nav_items = [
-            ("Inicio",       0),
-            ("Pacientes",    1),
-            ("Citas",        2),
-            ("Expedientes",  3),
-            ("Facturacion",  4),
+            ("🏠", "Inicio",       0),
+            ("👥", "Pacientes",    1),
+            ("📅", "Citas",        2),
+            ("🦷", "Expedientes",  3),
+            ("💰", "Facturación",  4),
         ]
         self.nav_btns = []
-        for lbl, idx in nav_items:
-            btn = SidebarButton("", lbl)
+        for icon, lbl, idx in nav_items:
+            btn = SidebarButton(icon, lbl)
             btn.clicked.connect(lambda _, i=idx: self._switch(i))
             self.nav_btns.append(btn)
             sb.addWidget(btn)
 
         sb.addStretch()
 
-        update_btn = QPushButton("  Actualizaciones")
+        update_btn = QPushButton("  🔄  Actualizaciones")
         update_btn.setFixedHeight(42)
         update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         update_btn.setFont(QFont("Segoe UI", 11))

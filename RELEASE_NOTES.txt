@@ -1,1 +1,1 @@
-parche 
+Fix para actualizaciones de windows y macbook (enfocado mas en macbook)  

@@ -1,8 +1,5 @@
-"""
-updater.py
-Sistema de actualizaciones automáticas.
-Revisa GitHub Releases al abrir la app y pregunta si descargar.
-"""
+# Sistema de actualizaciones automaticas via GitHub Releases.
+# Revisa al abrir la app y descarga/instala si hay version nueva.
 
 import os
 import sys
@@ -15,31 +12,31 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QProgressBar, QWidget
+    QPushButton, QProgressBar, QWidget, QMessageBox
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QObject, pyqtSignal as _Signal
 from PyQt6.QtGui import QFont
 
-# ── Configuración ─────────────────────────────────────────────────────────────
-GITHUB_USER = "gaelorte22-dotcom"
-GITHUB_REPO = "dental_app"
-VERSION_ACTUAL = "1.2.7"
+GITHUB_USER   = "gaelorte22-dotcom"
+GITHUB_REPO   = "dental_app"
+VERSION_ACTUAL = "1.2.7.1"
+GITHUB_TOKEN  = ""  # se asigna desde main o queda vacio si el repo es publico
 
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
 
-PRIMARY  = "#1A6B8A"
-SECONDARY= "#2196B0"
-SUCCESS  = "#27AE60"
-BG       = "#F5F8FA"
-TEXT     = "#2C3E50"
-MUTED    = "#7F8C8D"
-BORDER   = "#DEE4E8"
+PRIMARY   = "#1A6B8A"
+SECONDARY = "#2196B0"
+BG        = "#F5F8FA"
+TEXT      = "#2C3E50"
+MUTED     = "#7F8C8D"
+BORDER    = "#DEE4E8"
 
 
 def _btn(label, color, hover, text_color="white", w=None):
     b = QPushButton(label)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
-    if w: b.setFixedWidth(w)
+    if w:
+        b.setFixedWidth(w)
     b.setStyleSheet(f"""
         QPushButton {{
             background:{color}; color:{text_color};
@@ -52,7 +49,6 @@ def _btn(label, color, hover, text_color="white", w=None):
 
 
 def _version_mayor(v1: str, v2: str) -> bool:
-    """Retorna True si v1 > v2"""
     try:
         t1 = tuple(int(x) for x in v1.lstrip("v").split("."))
         t2 = tuple(int(x) for x in v2.lstrip("v").split("."))
@@ -61,106 +57,100 @@ def _version_mayor(v1: str, v2: str) -> bool:
         return False
 
 
-# ── Signal bridge para comunicación entre hilos ───────────────────────────────
-from PyQt6.QtCore import QObject, pyqtSignal as _Signal
+def _carpeta_downloads() -> str:
+    path = os.path.join(os.path.expanduser("~"), "Downloads")
+    os.makedirs(path, exist_ok=True)
+    return path
 
-class _Bridge(QObject):
+
+# Bridge para pasar senales desde hilos secundarios al hilo principal de Qt
+class _CheckerBridge(QObject):
     update_signal     = _Signal(dict)
     sin_update_signal = _Signal()
     error_signal      = _Signal(str)
 
-# ── Worker thread para revisar actualizaciones ────────────────────────────────
-class UpdateChecker:
-    def __init__(self):
-        self._bridge = _Bridge()
-        self._bridge.update_signal.connect(self._on_update)
-        self._bridge.sin_update_signal.connect(self._on_sin_update)
-        self._bridge.error_signal.connect(self._on_error)
-        self._cb_update     = []
-        self._cb_sin_update = []
-        self._cb_error      = []
 
-    def on_update(self, fn):     self._cb_update.append(fn)
-    def on_sin_update(self, fn): self._cb_sin_update.append(fn)
-    def on_error(self, fn):      self._cb_error.append(fn)
-
-    def _on_update(self, info):
-        for fn in self._cb_update: fn(info)
-
-    def _on_sin_update(self):
-        for fn in self._cb_sin_update: fn()
-
-    def _on_error(self, msg):
-        for fn in self._cb_error: fn(msg)
-
-    def start(self):
-        t = threading.Thread(target=self._run, daemon=True)
-        t.start()
-
-    def _run(self):
-        try:
-            print(f"[Updater] Verificando actualizaciones... URL: {API_URL}")
-            req = urllib.request.Request(
-                API_URL,
-                headers={
-                    "User-Agent": "DentalApp-Updater",
-                    "Authorization": f"Bearer {GITHUB_TOKEN}"
-                }
-            )
-            with urllib.request.urlopen(req, timeout=8) as resp:
-                data = json.loads(resp.read().decode())
-
-            version_nueva = data.get("tag_name", "").lstrip("v")
-            print(f"[Updater] Versión actual: {VERSION_ACTUAL} | Versión nueva: {version_nueva}")
-            if _version_mayor(version_nueva, VERSION_ACTUAL):
-                assets = data.get("assets", [])
-                asset_url = None; asset_name = None
-
-                if sys.platform == "win32":
-                    # Buscar primero el instalador Setup, si no existe usar el .exe directo
-                    for a in assets:
-                        if "Setup" in a["name"] and a["name"].endswith(".exe"):
-                            asset_url = a["browser_download_url"]
-                            asset_name = a["name"]; break
-                    if not asset_url:
-                        for a in assets:
-                            if a["name"].endswith(".exe"):
-                                asset_url = a["browser_download_url"]
-                                asset_name = a["name"]; break
-                elif sys.platform == "darwin":
-                    for a in assets:
-                        if "Mac" in a["name"] and a["name"].endswith(".zip"):
-                            asset_url = a["browser_download_url"]
-                            asset_name = a["name"]; break
-
-                self._bridge.update_signal.emit({
-                    "version":    version_nueva,
-                    "notas":      data.get("body", ""),
-                    "asset_url":  asset_url,
-                    "asset_name": asset_name,
-                    "fecha":      data.get("published_at", "")[:10],
-                })
-            else:
-                self._bridge.sin_update_signal.emit()
-
-        except urllib.error.URLError as e:
-            print(f"[Updater] Sin conexión: {e}")
-            self._bridge.error_signal.emit("Sin conexión a internet")
-        except Exception as e:
-            print(f"[Updater] Error: {e}")
-            self._bridge.error_signal.emit(str(e))
-
-
-# ── Worker thread para descargar ──────────────────────────────────────────────
 class _DownloaderBridge(QObject):
     progreso_signal   = _Signal(int)
     completado_signal = _Signal(str)
     error_signal      = _Signal(str)
 
+
+class UpdateChecker:
+    def __init__(self):
+        self._bridge = _CheckerBridge()
+        self._cb_update     = []
+        self._cb_sin_update = []
+        self._cb_error      = []
+        self._bridge.update_signal.connect(lambda d: [fn(d) for fn in self._cb_update])
+        self._bridge.sin_update_signal.connect(lambda: [fn() for fn in self._cb_sin_update])
+        self._bridge.error_signal.connect(lambda m: [fn(m) for fn in self._cb_error])
+
+    def on_update(self, fn):     self._cb_update.append(fn)
+    def on_sin_update(self, fn): self._cb_sin_update.append(fn)
+    def on_error(self, fn):      self._cb_error.append(fn)
+
+    def start(self):
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        try:
+            headers = {"User-Agent": "DentalApp-Updater"}
+            if GITHUB_TOKEN:
+                headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+
+            req = urllib.request.Request(API_URL, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+
+            version_nueva = data.get("tag_name", "").lstrip("v")
+            if not _version_mayor(version_nueva, VERSION_ACTUAL):
+                self._bridge.sin_update_signal.emit()
+                return
+
+            assets     = data.get("assets", [])
+            asset_url  = None
+            asset_name = None
+
+            if sys.platform == "win32":
+                # Buscar primero el instalador Setup
+                for a in assets:
+                    if "Setup" in a["name"] and a["name"].endswith(".exe"):
+                        asset_url  = a["browser_download_url"]
+                        asset_name = a["name"]
+                        break
+                # Si no hay Setup, usar cualquier .exe
+                if not asset_url:
+                    for a in assets:
+                        if a["name"].endswith(".exe"):
+                            asset_url  = a["browser_download_url"]
+                            asset_name = a["name"]
+                            break
+            elif sys.platform == "darwin":
+                for a in assets:
+                    if "Mac" in a["name"] and a["name"].endswith(".zip"):
+                        asset_url  = a["browser_download_url"]
+                        asset_name = a["name"]
+                        break
+
+            self._bridge.update_signal.emit({
+                "version":    version_nueva,
+                "notas":      data.get("body", ""),
+                "asset_url":  asset_url,
+                "asset_name": asset_name,
+                "fecha":      data.get("published_at", "")[:10],
+            })
+
+        except urllib.error.URLError:
+            self._bridge.error_signal.emit("Sin conexion a internet")
+        except Exception as e:
+            self._bridge.error_signal.emit(str(e))
+
+
 class Downloader:
     def __init__(self, url: str, nombre: str):
         self.url    = url
-        self.nombre = nombre
+        self.nombre = nombre or "DentalApp_update"
         self._bridge = _DownloaderBridge()
         self._cb_progreso   = []
         self._cb_completado = []
@@ -174,36 +164,29 @@ class Downloader:
     def on_error(self, fn):      self._cb_error.append(fn)
 
     def start(self):
-        t = threading.Thread(target=self._run, daemon=True)
-        t.start()
+        threading.Thread(target=self._run, daemon=True).start()
 
     def _run(self):
         try:
-            from datetime import datetime
-            nombre = self.nombre.strip() if self.nombre else "DentalApp_update.exe"
-
-            # Carpeta de descargas
-            downloads = os.path.join(os.path.expanduser("~"), "Downloads")
-            os.makedirs(downloads, exist_ok=True)
-
-            # Usar timestamp para evitar conflicto con archivo anterior
-            base, ext = os.path.splitext(nombre)
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            dest = os.path.join(downloads, f"{base}_{ts}{ext}")
+            # Agregar timestamp al nombre para evitar conflictos de permisos
+            base, ext = os.path.splitext(self.nombre)
+            ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dest = os.path.join(_carpeta_downloads(), f"{base}_{ts}{ext}")
 
             req = urllib.request.Request(
                 self.url,
                 headers={"User-Agent": "DentalApp-Updater"}
             )
-            with urllib.request.urlopen(req) as resp:
-                total = int(resp.headers.get("Content-Length", 0))
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                total      = int(resp.headers.get("Content-Length", 0))
                 descargado = 0
                 with open(dest, "wb") as f:
                     while True:
-                        data = resp.read(8192)
-                        if not data: break
-                        f.write(data)
-                        descargado += len(data)
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        descargado += len(chunk)
                         if total:
                             self._bridge.progreso_signal.emit(int(descargado * 100 / total))
 
@@ -212,35 +195,13 @@ class Downloader:
 
         except Exception as e:
             self._bridge.error_signal.emit(str(e))
-            req  = urllib.request.Request(
-                self.url,
-                headers={"User-Agent": "DentalApp-Updater"}
-            )
-            with urllib.request.urlopen(req) as resp:
-                total = int(resp.headers.get("Content-Length", 0))
-                descargado = 0
-                with open(dest, "wb") as f:
-                    while True:
-                        data = resp.read(8192)
-                        if not data: break
-                        f.write(data)
-                        descargado += len(data)
-                        if total:
-                            self._emit("progreso", int(descargado * 100 / total))
-
-            self._emit("progreso", 100)
-            self._emit("completado", dest)
-
-        except Exception as e:
-            self._emit("error", str(e))
 
 
-# ── Dialog de actualización ───────────────────────────────────────────────────
 class UpdateDialog(QDialog):
     def __init__(self, info: dict, parent=None):
         super().__init__(parent)
         self.info = info
-        self.setWindowTitle("Actualización Disponible")
+        self.setWindowTitle("Actualizacion disponible")
         self.setFixedWidth(460)
         self.setStyleSheet(f"background:{BG}; color:{TEXT};")
         self._downloader = None
@@ -251,33 +212,34 @@ class UpdateDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header
-        hdr = QWidget(); hdr.setFixedHeight(80)
+        hdr = QWidget()
+        hdr.setFixedHeight(80)
         hdr.setStyleSheet(f"background:{PRIMARY};")
-        hl = QVBoxLayout(hdr); hl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        t = QLabel("🎉  Nueva Versión Disponible")
+        hl = QVBoxLayout(hdr)
+        hl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        t = QLabel("Nueva version disponible")
         t.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
-        t.setStyleSheet("color:white;"); t.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        t.setStyleSheet("color:white;")
+        t.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hl.addWidget(t)
         layout.addWidget(hdr)
 
         body = QWidget()
-        bl = QVBoxLayout(body); bl.setContentsMargins(28,20,28,20); bl.setSpacing(12)
+        bl = QVBoxLayout(body)
+        bl.setContentsMargins(28, 20, 28, 20)
+        bl.setSpacing(12)
 
-        # Versión
         ver_row = QHBoxLayout()
-        ver_row.addWidget(self._info_card("Versión actual", f"v{VERSION_ACTUAL}", MUTED))
-        ver_row.addWidget(QLabel("→"))
-        ver_row.addWidget(self._info_card("Nueva versión", f"v{self.info['version']}", SUCCESS))
+        ver_row.addWidget(self._info_card("Version actual", f"v{VERSION_ACTUAL}", MUTED))
+        ver_row.addWidget(QLabel("->"))
+        ver_row.addWidget(self._info_card("Version nueva", f"v{self.info['version']}", "#27AE60"))
         bl.addLayout(ver_row)
 
-        # Notas
         if self.info.get("notas"):
             notas_lbl = QLabel("Novedades:")
             notas_lbl.setStyleSheet(f"color:{TEXT}; font-weight:600; font-size:13px;")
             bl.addWidget(notas_lbl)
-
-            notas = QLabel(self.info["notas"][:300])
+            notas = QLabel(self.info["notas"][:400])
             notas.setWordWrap(True)
             notas.setStyleSheet(f"""
                 background:white; border-radius:8px; border:1px solid {BORDER};
@@ -285,19 +247,13 @@ class UpdateDialog(QDialog):
             """)
             bl.addWidget(notas)
 
-        # Barra de progreso (oculta inicialmente)
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setFixedHeight(10)
         self.progress.setStyleSheet(f"""
-            QProgressBar {{
-                border:none; border-radius:5px;
-                background:{BORDER};
-            }}
-            QProgressBar::chunk {{
-                background:{PRIMARY}; border-radius:5px;
-            }}
+            QProgressBar {{ border:none; border-radius:5px; background:{BORDER}; }}
+            QProgressBar::chunk {{ background:{PRIMARY}; border-radius:5px; }}
         """)
         self.progress.setVisible(False)
         bl.addWidget(self.progress)
@@ -305,15 +261,17 @@ class UpdateDialog(QDialog):
         self.status_lbl = QLabel("")
         self.status_lbl.setStyleSheet(f"color:{MUTED}; font-size:11px;")
         self.status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_lbl.setWordWrap(True)
         bl.addWidget(self.status_lbl)
 
-        # Botones
-        btn_row = QHBoxLayout(); btn_row.addStretch()
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
         self.skip_btn = _btn("Ahora no", "#ECF0F1", "#D5DBDB", TEXT)
         self.skip_btn.clicked.connect(self.reject)
-        self.dl_btn = _btn("⬇️  Descargar Actualización", PRIMARY, SECONDARY)
+        self.dl_btn = _btn("Descargar actualizacion", PRIMARY, SECONDARY)
         self.dl_btn.clicked.connect(self._descargar)
-        btn_row.addWidget(self.skip_btn); btn_row.addWidget(self.dl_btn)
+        btn_row.addWidget(self.skip_btn)
+        btn_row.addWidget(self.dl_btn)
         bl.addLayout(btn_row)
 
         layout.addWidget(body)
@@ -321,11 +279,16 @@ class UpdateDialog(QDialog):
     def _info_card(self, titulo, valor, color):
         card = QWidget()
         card.setStyleSheet(f"background:white; border-radius:8px; border:1px solid {BORDER};")
-        cl = QVBoxLayout(card); cl.setContentsMargins(12,8,12,8); cl.setSpacing(2)
-        t = QLabel(titulo); t.setStyleSheet(f"color:{MUTED}; font-size:11px; border:none; background:transparent;")
-        v = QLabel(valor);  v.setFont(QFont("Segoe UI",13,QFont.Weight.Bold))
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(12, 8, 12, 8)
+        cl.setSpacing(2)
+        t = QLabel(titulo)
+        t.setStyleSheet(f"color:{MUTED}; font-size:11px; border:none; background:transparent;")
+        v = QLabel(valor)
+        v.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
         v.setStyleSheet(f"color:{color}; border:none; background:transparent;")
-        cl.addWidget(t); cl.addWidget(v)
+        cl.addWidget(t)
+        cl.addWidget(v)
         return card
 
     def _descargar(self):
@@ -336,10 +299,10 @@ class UpdateDialog(QDialog):
             return
 
         self.dl_btn.setEnabled(False)
-        self.dl_btn.setText("Descargando…")
+        self.dl_btn.setText("Descargando...")
         self.skip_btn.setEnabled(False)
         self.progress.setVisible(True)
-        self.status_lbl.setText("Iniciando descarga…")
+        self.status_lbl.setText("Iniciando descarga...")
 
         self._downloader = Downloader(self.info["asset_url"], self.info["asset_name"])
         self._downloader.on_progreso(self._on_progreso)
@@ -355,93 +318,104 @@ class UpdateDialog(QDialog):
         self.dl_btn.setText("Descargado")
 
         if sys.platform == "win32":
-            self.status_lbl.setText("Abriendo instalador...")
-            QTimer.singleShot(1000, lambda: self._instalar(ruta))
+            self.status_lbl.setText("Descarga completa. Abriendo instalador...")
+            QTimer.singleShot(1000, lambda: self._instalar_windows(ruta))
+
         elif sys.platform == "darwin":
-            import subprocess, zipfile
-            try:
-                # Descomprimir el zip en Downloads
-                extract_dir = os.path.join(os.path.dirname(ruta), "DentalApp_update")
-                os.makedirs(extract_dir, exist_ok=True)
-                with zipfile.ZipFile(ruta, 'r') as z:
-                    z.extractall(extract_dir)
+            self._instalar_mac(ruta)
 
-                # Buscar el .app descomprimido
-                app_origen = None
-                for item in os.listdir(extract_dir):
-                    if item.endswith(".app") or item == "DentalApp":
-                        app_origen = os.path.join(extract_dir, item)
-                        break
-
-                if app_origen:
-                    # Copiar a /Applications con osascript para pedir permisos
-                    script = f'''
-                    do shell script "cp -R '{app_origen}' '/Applications/DentalApp'" with administrator privileges
-                    '''
-                    subprocess.Popen(["osascript", "-e", script])
-                    self.status_lbl.setText(
-                        "Instalando actualizacion...\n"
-                        "Ingresa tu contrasena si se solicita.\n"
-                        "La app se cerrara y abrira la nueva version."
-                    )
-                    self.status_lbl.setWordWrap(True)
-                    # Abrir la nueva version y cerrar la actual
-                    QTimer.singleShot(3000, lambda: self._abrir_nueva_mac())
-                else:
-                    raise Exception("No se encontro la app descomprimida")
-
-            except Exception as e:
-                # Si falla el automatico, mostrar instrucciones manuales
-                subprocess.Popen(["open", os.path.dirname(ruta)])
-                self.status_lbl.setText(
-                    "Descargado en Downloads.\n"
-                    "1. Descomprime DentalApp-Mac.zip\n"
-                    "2. Arrastra DentalApp a Aplicaciones\n"
-                    "3. Abre la nueva version"
-                )
-                self.status_lbl.setWordWrap(True)
-
-            self.skip_btn.setEnabled(True)
-            self.skip_btn.setText("Cerrar")
         else:
             self.status_lbl.setText(f"Descargado en: {ruta}")
             self.skip_btn.setEnabled(True)
             self.skip_btn.setText("Cerrar")
 
-    def _instalar(self, ruta):
+    def _instalar_windows(self, ruta):
         try:
-            if sys.platform == "win32":
-                import os
-                os.startfile(ruta)
-                QTimer.singleShot(500, lambda: sys.exit(0))
-            else:
-                subprocess.Popen([ruta])
-                sys.exit(0)
+            os.startfile(ruta)
+            QTimer.singleShot(800, lambda: sys.exit(0))
         except Exception as e:
             self._on_error(str(e))
 
-    def _abrir_nueva_mac(self):
+    def _instalar_mac(self, ruta):
+        import zipfile, shutil, stat, tempfile
+
         try:
-            import subprocess
-            subprocess.Popen(["open", "/Applications/DentalApp"])
-            sys.exit(0)
-        except Exception:
-            sys.exit(0)
+            # Descomprimir
+            extract_dir = os.path.join(_carpeta_downloads(), "DentalApp_update")
+            if os.path.exists(extract_dir):
+                shutil.rmtree(extract_dir)
+            os.makedirs(extract_dir, exist_ok=True)
+
+            with zipfile.ZipFile(ruta, "r") as z:
+                z.extractall(extract_dir)
+
+            # Buscar el ejecutable dentro del zip
+            app_origen = None
+            for item in os.listdir(extract_dir):
+                if item.endswith(".app") or item == "DentalApp":
+                    app_origen = os.path.join(extract_dir, item)
+                    break
+
+            if not app_origen:
+                raise FileNotFoundError("No se encontro DentalApp en el zip")
+
+            # Detectar ruta actual del ejecutable instalado
+            ejecutable = sys.executable
+            if ".app" in ejecutable:
+                app_destino = ejecutable.split(".app")[0] + ".app"
+            else:
+                app_destino = ejecutable
+
+            subprocess.run(["chmod", "+x", app_origen], check=False)
+
+            # Script externo que espera a que la app cierre, reemplaza y reabre
+            script = f"""#!/bin/bash
+sleep 2
+cp -f "{app_origen}" "{app_destino}" 2>/dev/null
+if [ $? -ne 0 ]; then
+  osascript -e 'do shell script "cp -f \\"{app_origen}\\" \\"{app_destino}\\"" with administrator privileges' 2>/dev/null
+fi
+chmod +x "{app_destino}"
+open "{app_destino}"
+sleep 3
+rm -rf "{extract_dir}"
+rm -f "{ruta}"
+"""
+            script_path = os.path.join(tempfile.gettempdir(), "dentalapp_update.sh")
+            with open(script_path, "w") as f:
+                f.write(script)
+            os.chmod(script_path, stat.S_IRWXU)
+
+            subprocess.Popen(
+                ["bash", script_path],
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+
+            self.status_lbl.setText("Actualizacion lista.\nLa app se cerrara y abrira la nueva version.")
+            QTimer.singleShot(2000, lambda: sys.exit(0))
+
+        except Exception as e:
+            # Si algo falla, abrir Downloads y mostrar instrucciones
+            subprocess.Popen(["open", _carpeta_downloads()])
+            self.status_lbl.setText(
+                "Descargado en Downloads.\n"
+                "1. Descomprime DentalApp-Mac.zip\n"
+                "2. Reemplaza DentalApp en Aplicaciones\n"
+                "3. Abre la nueva version"
+            )
+            self.skip_btn.setEnabled(True)
+            self.skip_btn.setText("Cerrar")
 
     def _on_error(self, msg):
-        self.status_lbl.setText(f"Error: {msg}")
+        self.status_lbl.setText(f"Error al descargar: {msg}")
         self.dl_btn.setEnabled(True)
         self.dl_btn.setText("Reintentar")
         self.skip_btn.setEnabled(True)
 
 
-# ── Función principal — llamar al arrancar la app ─────────────────────────────
 def verificar_actualizacion(parent=None, silencioso=True):
-    """
-    Revisa si hay actualización disponible.
-    silencioso=True → solo muestra dialog si hay actualización (al arrancar)
-    silencioso=False → muestra resultado siempre (botón manual)
-    """
     checker = UpdateChecker()
 
     def on_update(info):
@@ -450,18 +424,16 @@ def verificar_actualizacion(parent=None, silencioso=True):
 
     def on_sin_update():
         if not silencioso:
-            from PyQt6.QtWidgets import QMessageBox
             m = QMessageBox(parent)
             m.setWindowTitle("Sin actualizaciones")
-            m.setText("✅ Ya tienes la versión más reciente.")
+            m.setText("Ya tienes la version mas reciente.")
             m.setStyleSheet("color:black; background:white;")
             m.exec()
 
     def on_error(msg):
         if not silencioso:
-            from PyQt6.QtWidgets import QMessageBox
             m = QMessageBox(parent)
-            m.setWindowTitle("Sin conexión")
+            m.setWindowTitle("Sin conexion")
             m.setText(f"No se pudo verificar actualizaciones:\n{msg}")
             m.setStyleSheet("color:black; background:white;")
             m.exec()
