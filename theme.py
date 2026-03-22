@@ -96,27 +96,32 @@ def app_stylesheet():
 
         /* ── Scrollbar Vertical — SIEMPRE VISIBLE ── */
         QScrollBar:vertical {{
-            background:{p['BORDER']}; width:10px;
-            border-radius:5px; margin:0;
+            background:{p['BORDER']}; width:12px;
+            border-radius:6px; margin:0;
         }}
         QScrollBar::handle:vertical {{
-            background:{p['PRIMARY']}; border-radius:5px; min-height:30px;
+            background:{p['PRIMARY']}; border-radius:6px; min-height:40px;
         }}
         QScrollBar::handle:vertical:hover {{ background:{p['SECONDARY']}; }}
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0px; }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0px; border:none; }}
         QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background:transparent; }}
 
         /* ── Scrollbar Horizontal — SIEMPRE VISIBLE ── */
         QScrollBar:horizontal {{
-            background:{p['BORDER']}; height:10px;
-            border-radius:5px; margin:0;
+            background:{p['BORDER']}; height:12px;
+            border-radius:6px; margin:0;
         }}
         QScrollBar::handle:horizontal {{
-            background:{p['PRIMARY']}; border-radius:5px; min-width:30px;
+            background:{p['PRIMARY']}; border-radius:6px; min-width:40px;
         }}
         QScrollBar::handle:horizontal:hover {{ background:{p['SECONDARY']}; }}
-        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width:0px; }}
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width:0px; border:none; }}
         QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background:transparent; }}
+
+        /* Forzar scroll en áreas de scroll */
+        QScrollArea {{ border:none; background:transparent; }}
+        QAbstractScrollArea {{ border:none; }}
+        QAbstractScrollArea::corner {{ background:{p['BORDER']}; }}
 
         QToolTip {{
             background:{p['CARD']}; color:{p['TEXT']};

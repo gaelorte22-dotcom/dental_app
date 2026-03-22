@@ -250,14 +250,22 @@ class MainWindow(QMainWindow):
         sb.addWidget(ver_lbl)
         root.addWidget(sidebar)
 
-        # ── Stack ─────────────────────────────────────────────────────────────
+        from PyQt6.QtWidgets import QScrollArea
+        # ── Stack con scroll ──────────────────────────────────────────────────
+        stack_scroll = QScrollArea()
+        stack_scroll.setWidgetResizable(True)
+        stack_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        stack_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        stack_scroll.setStyleSheet("QScrollArea { border:none; background:transparent; }")
+
         self.stack = QStackedWidget()
         self.stack.addWidget(HomeWidget(self._switch))   # 0
         self.stack.addWidget(PacientesWidget())          # 1
         self.stack.addWidget(CitasWidget())              # 2
         self.stack.addWidget(ExpedientesWidget())        # 3
         self.stack.addWidget(FacturacionWidget())        # 4
-        root.addWidget(self.stack)
+        stack_scroll.setWidget(self.stack)
+        root.addWidget(stack_scroll)
         self._switch(0)
 
     def _setup_reminders(self):
