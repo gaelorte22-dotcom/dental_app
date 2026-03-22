@@ -254,8 +254,8 @@ class MainWindow(QMainWindow):
         # ── Stack con scroll ──────────────────────────────────────────────────
         stack_scroll = QScrollArea()
         stack_scroll.setWidgetResizable(True)
-        stack_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        stack_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        stack_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        stack_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         stack_scroll.setStyleSheet("QScrollArea { border:none; background:transparent; }")
 
         self.stack = QStackedWidget()

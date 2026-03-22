@@ -122,6 +122,8 @@ def app_stylesheet():
         QScrollArea {{ border:none; background:transparent; }}
         QAbstractScrollArea {{ border:none; }}
         QAbstractScrollArea::corner {{ background:{p['BORDER']}; }}
+        QAbstractScrollArea QScrollBar:vertical {{ width:12px; }}
+        QAbstractScrollArea QScrollBar:horizontal {{ height:12px; }}
 
         QToolTip {{
             background:{p['CARD']}; color:{p['TEXT']};

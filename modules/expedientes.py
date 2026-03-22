@@ -1575,8 +1575,8 @@ def _build_perio_table(dientes: list, cols: dict, seccion: str) -> QWidget:
 
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
-    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-    scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+    scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
     scroll.setStyleSheet("QScrollArea { border:none; background:transparent; }")
 
     inner = QWidget(); inner.setStyleSheet("background:transparent;")
@@ -1775,8 +1775,8 @@ class PeriodontogramaWidget(QWidget):
         # ── Scroll vertical principal ─────────────────────────────────────────
         main_scroll = QScrollArea()
         main_scroll.setWidgetResizable(True)
-        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        main_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        main_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
 
         container = QWidget(); container.setStyleSheet(f"background:{BG};")
         cont_lay = QVBoxLayout(container)

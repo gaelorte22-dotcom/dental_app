@@ -153,19 +153,19 @@ jobs:
           name: "DentalApp ${{ github.ref_name }}"
           body: |
             ## 🦷 DentalApp ${{ github.ref_name }}
-            
+
+            ### Novedades
+            ${{ github.event.head_commit.message }}
+
             ### Descargas
-            - **Windows:** `DentalApp.exe`
-            - **Mac:** `DentalApp-Mac.zip` → descomprimir y abrir
-            
-            ### Instalación Windows
-            Descarga `DentalApp.exe` y ejecuta el instalador.
-            
-            ### Instalación Mac
+            - **Windows:** `DentalApp.exe` — ejecuta el instalador
+            - **Mac:** `DentalApp-Mac.zip` — descomprime y arrastra a Aplicaciones
+
+            ### Instalación Mac (primera vez)
             1. Descarga `DentalApp-Mac.zip`
             2. Descomprime
-            3. Arrastra `DentalApp` a tu carpeta Aplicaciones
-            4. Click derecho → Abrir (primera vez)
+            3. Click derecho sobre `DentalApp` → **Abrir**
+            4. Si aparece aviso de seguridad → Abrir de todas formas
           files: |
             artifacts/windows/DentalApp.exe
             artifacts/mac/DentalApp-Mac.zip
