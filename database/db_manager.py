@@ -209,6 +209,17 @@ def init_db():
             notas TEXT,
             FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
         );
+
+        CREATE TABLE IF NOT EXISTS periodontograma (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            paciente_id INTEGER NOT NULL,
+            fecha TEXT NOT NULL,
+            dentista TEXT,
+            tipo_denticion TEXT DEFAULT 'permanente',
+            datos_json TEXT,
+            notas TEXT,
+            FOREIGN KEY (paciente_id) REFERENCES pacientes(id)
+        );
     """)
 
     conn.commit()
@@ -285,5 +296,61 @@ def eliminar_paciente(paciente_id: int):
     conn.execute(
         "UPDATE pacientes SET activo = 0 WHERE id = ?", (paciente_id,)
     )
+    conn.commit()
+    conn.close()
+
+
+# ── PERIODONTOGRAMA CRUD ────────────────────────────────────────────────────
+
+def get_periodontogramas(paciente_id: int) -> list:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM periodontograma 
+        WHERE paciente_id=? ORDER BY fecha DESC
+    """, (paciente_id,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_periodontograma(pid: int) -> dict:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM periodontograma WHERE id=?", (pid,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else {}
+
+
+def crear_periodontograma(paciente_id: int, fecha: str, dentista: str,
+                          tipo_denticion: str, datos_json: str, notas: str) -> int:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO periodontograma 
+        (paciente_id, fecha, dentista, tipo_denticion, datos_json, notas)
+        VALUES (?,?,?,?,?,?)
+    """, (paciente_id, fecha, dentista, tipo_denticion, datos_json, notas))
+    conn.commit()
+    pid = cur.lastrowid
+    conn.close()
+    return pid
+
+
+def actualizar_periodontograma(pid: int, datos_json: str, notas: str, dentista: str):
+    conn = get_connection()
+    conn.execute("""
+        UPDATE periodontograma 
+        SET datos_json=?, notas=?, dentista=?
+        WHERE id=?
+    """, (datos_json, notas, dentista, pid))
+    conn.commit()
+    conn.close()
+
+
+def eliminar_periodontograma(pid: int):
+    conn = get_connection()
+    conn.execute("DELETE FROM periodontograma WHERE id=?", (pid,))
     conn.commit()
     conn.close()

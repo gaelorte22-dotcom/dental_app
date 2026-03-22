@@ -19,9 +19,10 @@ from PyQt6.QtWidgets import (
     QFormLayout, QComboBox, QTextEdit, QTableWidget,
     QTableWidgetItem, QHeaderView, QDoubleSpinBox, QScrollArea,
     QGridLayout, QFileDialog, QSizePolicy, QListWidget,
-    QListWidgetItem, QSplitter, QApplication
+    QListWidgetItem, QSplitter, QApplication, QSpinBox,
+    QCheckBox, QDateEdit
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QSize, pyqtSignal, QDate
 from PyQt6.QtGui import QFont, QBrush, QColor, QPixmap, QPainter, QPen
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -845,6 +846,7 @@ class ExpedienteWidget(QWidget):
         """)
         self.tabs.addTab(self._build_historial_tab(),  "📋  Historial")
         self.tabs.addTab(self._build_odontograma_tab(),"🦷  Odontograma")
+        self.tabs.addTab(self._build_periodontograma_tab(), "📊  Periodontograma")
         self.tabs.addTab(self._build_alergias_tab(),   "⚕️  Datos Médicos")
         self.tabs.addTab(self._build_recetas_tab(),    "📝  Recetas")
         self.tabs.addTab(self._build_archivos_tab(),   "📎  Archivos")
@@ -937,6 +939,13 @@ class ExpedienteWidget(QWidget):
             self._load_historial()
 
     # ── TAB: Odontograma ──────────────────────────────────────────────────────
+    def _build_periodontograma_tab(self):
+        w = QWidget(); w.setStyleSheet(f"background:{BG};")
+        lay = QVBoxLayout(w); lay.setContentsMargins(0,0,0,0)
+        self.perio_widget = PeriodontogramaWidget(self.paciente)
+        lay.addWidget(self.perio_widget)
+        return w
+
     def _build_odontograma_tab(self):
         w = QWidget(); w.setStyleSheet(f"background:{BG};")
         lay = QVBoxLayout(w); lay.setContentsMargins(16,14,16,14); lay.setSpacing(10)
@@ -1369,3 +1378,519 @@ class ExpedientesWidget(QWidget):
             self._expediente_widget = None
         self._lista_widget.setVisible(True)
         self._buscar(self._search.text())
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PERIODONTOGRAMA COMPLETO
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Superior: 17..11 | 21..27 (sin muelas del juicio)
+DIENTES_SUP = [17,16,15,14,13,12,11,21,22,23,24,25,26,27]
+# Inferior: 47..41 | 31..37
+DIENTES_INF = [47,46,45,44,43,42,41,31,32,33,34,35,36,37]
+
+PRONOSTICO_OPTS  = ["Bueno","Dudoso","Malo","Imposible"]
+MOVILIDAD_OPTS   = ["0","I","II","III"]
+FURCA_OPTS       = ["—","I","II","III"]
+PRONOSTICO_COLORS = {
+    "Bueno":    ("#E1F5EE","#0F6E56"),
+    "Dudoso":   ("#FAEEDA","#854F0B"),
+    "Malo":     ("#FCEBEB","#A32D2D"),
+    "Imposible":("#D3D1C7","#444441"),
+}
+
+def _spin(min_v=0, max_v=12, w=30) -> QSpinBox:
+    s = QSpinBox()
+    s.setRange(min_v, max_v)
+    s.setValue(0)
+    s.setFixedWidth(w); s.setFixedHeight(22)
+    s.setStyleSheet(f"""
+        QSpinBox {{
+            border:1px solid {BORDER}; border-radius:3px;
+            font-size:10px; padding:0 2px;
+            background:white; color:{TEXT};
+        }}
+        QSpinBox::up-button, QSpinBox::down-button {{ width:0px; }}
+    """)
+    return s
+
+def _combo_small(opts, w=64) -> QComboBox:
+    c = QComboBox()
+    for o in opts: c.addItem(o)
+    c.setFixedWidth(w); c.setFixedHeight(22)
+    c.setStyleSheet(f"""
+        QComboBox {{
+            border:1px solid {BORDER}; border-radius:3px;
+            font-size:9px; padding:1px 3px;
+            background:white; color:{TEXT};
+        }}
+        QComboBox QAbstractItemView {{ color:{TEXT}; background:white; font-size:10px; }}
+    """)
+    return c
+
+def _chk() -> QCheckBox:
+    cb = QCheckBox()
+    cb.setStyleSheet(f"""
+        QCheckBox {{
+            spacing: 0px;
+        }}
+        QCheckBox::indicator {{
+            width: 28px;
+            height: 20px;
+            border-radius: 4px;
+            border: 1.5px solid {BORDER};
+            background: #F5F8FA;
+        }}
+        QCheckBox::indicator:unchecked {{
+            background: #F5F8FA;
+            border: 1.5px solid {BORDER};
+            image: none;
+        }}
+        QCheckBox::indicator:checked {{
+            background: #E74C3C;
+            border: 1.5px solid #C0392B;
+            image: none;
+        }}
+        QCheckBox::indicator:unchecked:hover {{
+            background: #FDECEA;
+            border: 1.5px solid #E74C3C;
+        }}
+    """)
+    return cb
+
+def _row_lbl(txt, color=None) -> QLabel:
+    lbl = QLabel(txt)
+    lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    c = color or MUTED
+    lbl.setStyleSheet(f"color:{c}; font-size:9px; background:transparent; padding-right:4px;")
+    lbl.setFixedWidth(68)
+    return lbl
+
+def _sec_lbl(txt, color) -> QLabel:
+    lbl = QLabel(txt)
+    lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    lbl.setFont(QFont("Segoe UI",10,QFont.Weight.Bold))
+    lbl.setStyleSheet(f"color:{color}; background:transparent; letter-spacing:1px;")
+    return lbl
+
+
+class DienteCol:
+    """Columna de datos para un diente en la tabla del periodontograma."""
+    def __init__(self, numero:int):
+        self.numero = numero
+        # Superior
+        self.pronostico = _combo_small(PRONOSTICO_OPTS, 70)
+        self.implante   = _chk()
+        self.furca      = _combo_small(FURCA_OPTS, 44)
+        self.movilidad  = _combo_small(MOVILIDAD_OPTS, 44)
+        # Vestibular
+        self.sang_v  = _chk()
+        self.sup_v   = _chk()
+        self.sond_v  = _spin(0,12)
+        self.mg_v    = _spin(-5,10)
+        self.placa_v = _chk()
+        # Palatino/Lingual
+        self.placa_p = _chk()
+        self.mg_p    = _spin(-5,10)
+        self.sond_p  = _spin(0,12)
+        self.sup_p   = _chk()
+        self.sang_p  = _chk()
+        self.nota    = QLineEdit()
+        self.nota.setPlaceholderText("nota")
+        self.nota.setFixedHeight(20)
+        self.nota.setFixedWidth(70)
+        self.nota.setStyleSheet(f"""
+            QLineEdit {{
+                border:1px solid {BORDER}; border-radius:3px;
+                font-size:9px; padding:1px 3px; background:white; color:{TEXT};
+            }}
+        """)
+        # Actualizar color de pronóstico
+        self.pronostico.currentTextChanged.connect(self._update_prog_color)
+        self._update_prog_color(self.pronostico.currentText())
+
+    def _update_prog_color(self, val):
+        bg, fg = PRONOSTICO_COLORS.get(val, ("#FFFFFF", TEXT))
+        self.pronostico.setStyleSheet(f"""
+            QComboBox {{
+                border:1px solid {BORDER}; border-radius:3px;
+                font-size:9px; padding:1px 3px;
+                background:{bg}; color:{fg};
+            }}
+            QComboBox QAbstractItemView {{ color:{TEXT}; background:white; font-size:10px; }}
+        """)
+
+    def get_data(self) -> dict:
+        return {
+            "pronostico": self.pronostico.currentText(),
+            "implante":   self.implante.isChecked(),
+            "furca":      self.furca.currentText(),
+            "movilidad":  self.movilidad.currentText(),
+            "sang_v":     self.sang_v.isChecked(),
+            "sup_v":      self.sup_v.isChecked(),
+            "sond_v":     self.sond_v.value(),
+            "mg_v":       self.mg_v.value(),
+            "placa_v":    self.placa_v.isChecked(),
+            "placa_p":    self.placa_p.isChecked(),
+            "mg_p":       self.mg_p.value(),
+            "sond_p":     self.sond_p.value(),
+            "sup_p":      self.sup_p.isChecked(),
+            "sang_p":     self.sang_p.isChecked(),
+            "nota":       self.nota.text(),
+        }
+
+    def set_data(self, d:dict):
+        if not d: return
+        idx = PRONOSTICO_OPTS.index(d["pronostico"]) if d.get("pronostico") in PRONOSTICO_OPTS else 0
+        self.pronostico.setCurrentIndex(idx)
+        self.implante.setChecked(d.get("implante", False))
+        idx_f = FURCA_OPTS.index(d["furca"]) if d.get("furca") in FURCA_OPTS else 0
+        self.furca.setCurrentIndex(idx_f)
+        idx_m = MOVILIDAD_OPTS.index(d["movilidad"]) if d.get("movilidad") in MOVILIDAD_OPTS else 0
+        self.movilidad.setCurrentIndex(idx_m)
+        self.sang_v.setChecked(d.get("sang_v", False))
+        self.sup_v.setChecked(d.get("sup_v", False))
+        self.sond_v.setValue(d.get("sond_v", 0))
+        self.mg_v.setValue(d.get("mg_v", 0))
+        self.placa_v.setChecked(d.get("placa_v", False))
+        self.placa_p.setChecked(d.get("placa_p", False))
+        self.mg_p.setValue(d.get("mg_p", 0))
+        self.sond_p.setValue(d.get("sond_p", 0))
+        self.sup_p.setChecked(d.get("sup_p", False))
+        self.sang_p.setChecked(d.get("sang_p", False))
+        self.nota.setText(d.get("nota", ""))
+
+
+def _build_perio_table(dientes: list, cols: dict, seccion: str) -> QWidget:
+    """
+    Construye la tabla del periodontograma para una arcada.
+    seccion = 'superior' o 'inferior'
+    """
+    is_sup = (seccion == "superior")
+    azul = "#185FA5"; rojo = "#A32D2D"
+
+    w = QWidget(); w.setStyleSheet("background:transparent;")
+    lay = QVBoxLayout(w); lay.setContentsMargins(0,0,0,0); lay.setSpacing(2)
+
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.setStyleSheet("QScrollArea { border:none; background:transparent; }")
+
+    inner = QWidget(); inner.setStyleSheet("background:transparent;")
+    grid = QGridLayout(inner)
+    grid.setSpacing(2); grid.setContentsMargins(0,0,0,0)
+
+    # Filas
+    ROWS_SUP = [
+        ("Pronóstico",  None,  "pronostico"),
+        ("Implante",    None,  "implante"),
+        ("Furca",       None,  "furca"),
+        ("Movilidad",   None,  "movilidad"),
+        ("— VESTIBULAR —", azul, None),
+        ("Sangrado V",  rojo,  "sang_v"),
+        ("Supuración V",None,  "sup_v"),
+        ("Sondaje V",   azul,  "sond_v"),
+        ("Margen G. V", None,  "mg_v"),
+        ("Placa V",     None,  "placa_v"),
+        ("— PALATINO —", "#8E44AD", None),
+        ("Placa P",     None,  "placa_p"),
+        ("Margen G. P", None,  "mg_p"),
+        ("Sondaje P",   azul,  "sond_p"),
+        ("Supuración P",None,  "sup_p"),
+        ("Sangrado P",  rojo,  "sang_p"),
+        ("Nota",        None,  "nota"),
+    ]
+    ROWS_INF = [
+        ("Pronóstico",  None,  "pronostico"),
+        ("Implante",    None,  "implante"),
+        ("Furca",       None,  "furca"),
+        ("Movilidad",   None,  "movilidad"),
+        ("— LINGUAL —", "#0F6E56", None),
+        ("Sangrado L",  rojo,  "sang_p"),
+        ("Supuración L",None,  "sup_p"),
+        ("Sondaje L",   azul,  "sond_p"),
+        ("Margen G. L", None,  "mg_p"),
+        ("Placa L",     None,  "placa_p"),
+        ("— VESTIBULAR —", azul, None),
+        ("Placa V",     None,  "placa_v"),
+        ("Margen G. V", None,  "mg_v"),
+        ("Sondaje V",   azul,  "sond_v"),
+        ("Supuración V",None,  "sup_v"),
+        ("Sangrado V",  rojo,  "sang_v"),
+        ("Nota",        None,  "nota"),
+    ]
+    rows = ROWS_SUP if is_sup else ROWS_INF
+
+    # Headers de columna (números de diente)
+    lbl_empty = QLabel(""); lbl_empty.setFixedWidth(72)
+    grid.addWidget(lbl_empty, 0, 0)
+    for ci, num in enumerate(dientes):
+        lbl = QLabel(str(num))
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setFont(QFont("Segoe UI",10,QFont.Weight.Bold))
+        lbl.setStyleSheet(f"""
+            color:{PRIMARY}; background:{CARD};
+            border:1px solid {BORDER}; border-radius:4px;
+            padding:2px 0; min-width:44px;
+        """)
+        grid.addWidget(lbl, 0, ci+1)
+
+    # Filas de datos
+    for ri, (label, color, field) in enumerate(rows):
+        row = ri + 1
+
+        # Separator rows
+        if field is None:
+            sep_lbl = QLabel(label)
+            sep_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            sep_lbl.setFont(QFont("Segoe UI",8,QFont.Weight.Bold))
+            c = color or MUTED
+            sep_lbl.setStyleSheet(f"""
+                color:{c}; background:transparent;
+                font-size:8px; letter-spacing:1px; padding:1px 0;
+            """)
+            grid.addWidget(sep_lbl, row, 0)
+            for ci in range(len(dientes)):
+                sep = QFrame(); sep.setFixedHeight(2)
+                sep.setStyleSheet(f"background:{c}; border:none;")
+                grid.addWidget(sep, row, ci+1)
+            continue
+
+        # Row label
+        c = color or MUTED
+        grid.addWidget(_row_lbl(label, c), row, 0)
+
+        # Widgets por diente
+        for ci, num in enumerate(dientes):
+            col = cols[num]
+            widget = getattr(col, field)
+            cell = QWidget()
+            cell.setStyleSheet("background:transparent;")
+            cl = QHBoxLayout(cell)
+            cl.setContentsMargins(2,1,2,1)
+            cl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            cl.addWidget(widget)
+            grid.addWidget(cell, row, ci+1)
+
+    scroll.setWidget(inner)
+    lay.addWidget(scroll)
+    return w
+
+
+class PeriodontogramaWidget(QWidget):
+    """Periodontograma completo Superior (Vest/Palat) + Inferior (Ling/Vest)."""
+
+    def __init__(self, paciente:dict, parent=None):
+        super().__init__(parent)
+        self.paciente    = paciente
+        self.paciente_id = paciente["id"]
+        self._cols_sup   = {n: DienteCol(n) for n in DIENTES_SUP}
+        self._cols_inf   = {n: DienteCol(n) for n in DIENTES_INF}
+        self._perio_id   = None
+        self._build()
+        self._cargar_existente()
+
+    def _build(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(12,10,12,10)
+        root.setSpacing(8)
+
+        # ── Header ────────────────────────────────────────────────────────────
+        hdr = QHBoxLayout()
+        title = QLabel("📊  Periodontograma")
+        title.setFont(QFont("Segoe UI",15,QFont.Weight.Bold))
+        title.setStyleSheet(f"color:{PRIMARY}; background:transparent;")
+        hdr.addWidget(title)
+        hdr.addStretch()
+        fecha_lbl = QLabel("Fecha:")
+        fecha_lbl.setStyleSheet(f"color:{TEXT}; background:transparent; font-size:12px;")
+        hdr.addWidget(fecha_lbl)
+        self.fecha_input = QDateEdit()
+        self.fecha_input.setDate(QDate.currentDate())
+        self.fecha_input.setCalendarPopup(True)
+        self.fecha_input.setFixedWidth(120)
+        hdr.addWidget(self.fecha_input)
+        dent_lbl = QLabel("Dentista:")
+        dent_lbl.setStyleSheet(f"color:{TEXT}; background:transparent; font-size:12px;")
+        hdr.addWidget(dent_lbl)
+        self.dentista_input = QLineEdit()
+        self.dentista_input.setPlaceholderText("Nombre del dentista")
+        self.dentista_input.setFixedWidth(160)
+        hdr.addWidget(self.dentista_input)
+        root.addLayout(hdr)
+
+        # ── Resumen ───────────────────────────────────────────────────────────
+        self.resumen_lbl = QLabel("Media sondaje: — mm  |  % Placa: —%  |  % Sangrado: —%")
+        self.resumen_lbl.setStyleSheet(f"""
+            background:{CARD}; color:{TEXT};
+            border:1px solid {BORDER}; border-radius:8px;
+            padding:7px 14px; font-size:12px;
+        """)
+        root.addWidget(self.resumen_lbl)
+
+        # ── Leyenda ───────────────────────────────────────────────────────────
+        leyenda = QFrame()
+        leyenda.setStyleSheet(f"""
+            background:{CARD}; border:1px solid {BORDER};
+            border-radius:8px;
+        """)
+        ley_lay = QHBoxLayout(leyenda)
+        ley_lay.setContentsMargins(12,6,12,6)
+        ley_lay.setSpacing(16)
+        ley_title = QLabel("Referencia:")
+        ley_title.setStyleSheet(f"color:{MUTED}; font-size:10px; font-weight:600; background:transparent; border:none;")
+        ley_lay.addWidget(ley_title)
+        items = [
+            ("□", "#DEE4E8", "Sin marcar (click para marcar)"),
+            ("✓", "#E74C3C", "Marcado / Presente"),
+            ("Sondaje", "#185FA5", "Profundidad en mm (0-12)"),
+            ("MG", MUTED, "Margen gingival mm (-5 a 10)"),
+            ("I/II/III", "#8E44AD", "Grado furca o movilidad"),
+            ("Bueno", "#0F6E56", "Pronóstico favorable"),
+            ("Malo", "#A32D2D", "Pronóstico desfavorable"),
+        ]
+        for symbol, color, desc in items:
+            item_w = QWidget()
+            item_w.setStyleSheet("background:transparent; border:none;")
+            item_lay = QHBoxLayout(item_w)
+            item_lay.setContentsMargins(0,0,0,0)
+            item_lay.setSpacing(4)
+            sym_lbl = QLabel(symbol)
+            sym_lbl.setStyleSheet(f"""
+                background:{color}; color:white;
+                border-radius:3px; padding:1px 5px;
+                font-size:9px; font-weight:600; border:none;
+            """)
+            desc_lbl = QLabel(desc)
+            desc_lbl.setStyleSheet(f"color:{MUTED}; font-size:9px; background:transparent; border:none;")
+            item_lay.addWidget(sym_lbl)
+            item_lay.addWidget(desc_lbl)
+            ley_lay.addWidget(item_w)
+        ley_lay.addStretch()
+        root.addWidget(leyenda)
+
+        # ── Scroll vertical principal ─────────────────────────────────────────
+        main_scroll = QScrollArea()
+        main_scroll.setWidgetResizable(True)
+        main_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        main_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        container = QWidget(); container.setStyleSheet(f"background:{BG};")
+        cont_lay = QVBoxLayout(container)
+        cont_lay.setSpacing(10); cont_lay.setContentsMargins(4,4,4,4)
+
+        # SUPERIOR
+        cont_lay.addWidget(_sec_lbl("— SUPERIOR —", "#185FA5"))
+        cont_lay.addWidget(_build_perio_table(DIENTES_SUP, self._cols_sup, "superior"))
+
+        # Divisor
+        div = QFrame(); div.setFrameShape(QFrame.Shape.HLine)
+        div.setStyleSheet(f"background:{BORDER}; border:none;"); div.setFixedHeight(2)
+        cont_lay.addWidget(div)
+
+        # INFERIOR
+        cont_lay.addWidget(_sec_lbl("— INFERIOR —", "#3B6D11"))
+        cont_lay.addWidget(_build_perio_table(DIENTES_INF, self._cols_inf, "inferior"))
+
+        cont_lay.addStretch()
+        main_scroll.setWidget(container)
+        root.addWidget(main_scroll)
+
+        # ── Notas + botones ───────────────────────────────────────────────────
+        notas_lbl = QLabel("Notas generales:")
+        notas_lbl.setStyleSheet(f"color:{TEXT}; font-weight:600; background:transparent;")
+        root.addWidget(notas_lbl)
+        self.notas_input = QTextEdit()
+        self.notas_input.setFixedHeight(55)
+        root.addWidget(self.notas_input)
+
+        btn_row = QHBoxLayout(); btn_row.addStretch()
+        limpiar_btn = _btn("🗑️  Limpiar", "#ECF0F1", "#D5DBDB", TEXT)
+        limpiar_btn.clicked.connect(self._limpiar)
+        btn_row.addWidget(limpiar_btn)
+        guardar_btn = _btn("💾  Guardar Periodontograma", PRIMARY, SECONDARY)
+        guardar_btn.clicked.connect(self._guardar)
+        btn_row.addWidget(guardar_btn)
+        root.addLayout(btn_row)
+
+        # Conectar para resumen
+        for col in list(self._cols_sup.values()) + list(self._cols_inf.values()):
+            col.sond_v.valueChanged.connect(self._actualizar_resumen)
+            col.sond_p.valueChanged.connect(self._actualizar_resumen)
+
+    def _actualizar_resumen(self):
+        all_cols = list(self._cols_sup.values()) + list(self._cols_inf.values())
+        sondajes = []
+        placa = 0; sangrado = 0
+        total = len(all_cols)
+        for c in all_cols:
+            sondajes += [c.sond_v.value(), c.sond_p.value()]
+            if c.placa_v.isChecked() or c.placa_p.isChecked(): placa += 1
+            if c.sang_v.isChecked() or c.sang_p.isChecked(): sangrado += 1
+        media = sum(sondajes)/len(sondajes) if sondajes else 0
+        pct_p = placa/total*100 if total else 0
+        pct_s = sangrado/total*100 if total else 0
+        self.resumen_lbl.setText(
+            f"Media sondaje: {media:.1f} mm  |  % Placa: {pct_p:.0f}%  |  % Sangrado: {pct_s:.0f}%"
+        )
+
+    def _cargar_existente(self):
+        import json
+        from database.db_manager import get_periodontogramas
+        registros = get_periodontogramas(self.paciente_id)
+        if not registros: return
+        rec = registros[0]
+        self._perio_id = rec["id"]
+        if rec.get("fecha"):
+            self.fecha_input.setDate(QDate.fromString(rec["fecha"], "yyyy-MM-dd"))
+        self.dentista_input.setText(rec.get("dentista","") or "")
+        self.notas_input.setPlainText(rec.get("notas","") or "")
+        try:
+            datos = json.loads(rec.get("datos_json","{}") or "{}")
+            for num_str, d in datos.items():
+                num = int(num_str)
+                if num in self._cols_sup: self._cols_sup[num].set_data(d)
+                elif num in self._cols_inf: self._cols_inf[num].set_data(d)
+        except Exception:
+            pass
+        self._actualizar_resumen()
+
+    def _guardar(self):
+        import json
+        from database.db_manager import crear_periodontograma, actualizar_periodontograma
+        from PyQt6.QtWidgets import QMessageBox
+        datos = {}
+        for n, c in self._cols_sup.items(): datos[str(n)] = c.get_data()
+        for n, c in self._cols_inf.items(): datos[str(n)] = c.get_data()
+        datos_json  = json.dumps(datos, ensure_ascii=False)
+        fecha       = self.fecha_input.date().toString("yyyy-MM-dd")
+        dentista    = self.dentista_input.text().strip()
+        notas       = self.notas_input.toPlainText().strip()
+        if self._perio_id:
+            actualizar_periodontograma(self._perio_id, datos_json, notas, dentista)
+        else:
+            self._perio_id = crear_periodontograma(
+                self.paciente_id, fecha, dentista, "permanente", datos_json, notas
+            )
+        m = QMessageBox(self)
+        m.setWindowTitle("Guardado")
+        m.setText("✅ Periodontograma guardado correctamente.")
+        m.setStyleSheet("color:black; background:white;"); m.exec()
+        self._actualizar_resumen()
+
+    def _limpiar(self):
+        from PyQt6.QtWidgets import QMessageBox
+        m = QMessageBox(self)
+        m.setWindowTitle("Confirmar")
+        m.setText("¿Limpiar todos los datos del periodontograma?")
+        m.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        m.setStyleSheet("color:black; background:white;")
+        if m.exec() == QMessageBox.StandardButton.Yes:
+            for c in list(self._cols_sup.values()) + list(self._cols_inf.values()):
+                c.set_data({})
+            self.notas_input.clear()
+            self._perio_id = None
+            self._actualizar_resumen()
