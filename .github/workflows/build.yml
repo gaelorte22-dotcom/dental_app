@@ -58,11 +58,12 @@ jobs:
             --hidden-import="notificaciones" `
             --hidden-import="app_utils" `
             main.py
-
+ 
       - name: Compilar instalador con Inno Setup
         run: |
-          choco install innosetup --no-progress -y
-          iscc installer.iss
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Subir instalador como artefacto
         uses: actions/upload-artifact@v4
