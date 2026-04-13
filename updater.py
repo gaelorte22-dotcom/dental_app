@@ -19,7 +19,7 @@ from PyQt6.QtGui import QFont
 
 GITHUB_USER   = "gaelorte22-dotcom"
 GITHUB_REPO   = "dental_app"
-VERSION_ACTUAL = "1.3.1"
+VERSION_ACTUAL = "1.3.2"
 
 API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/releases/latest"
 
@@ -98,11 +98,20 @@ class UpdateChecker:
 
     def _run(self):
         try:
+            import ssl
+            # Crear contexto SSL compatible con PyInstaller en Mac
+            # certifi incluye los certificados necesarios cuando el sistema no los provee
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except ImportError:
+                ctx = ssl.create_default_context()
+
             req = urllib.request.Request(
                 API_URL,
                 headers={"User-Agent": "DentalApp-Updater"}
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as resp:
                 data = json.loads(resp.read().decode())
 
             version_nueva = data.get("tag_name", "").lstrip("v")
@@ -179,7 +188,13 @@ class Downloader:
                 self.url,
                 headers={"User-Agent": "DentalApp-Updater"}
             )
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            import ssl
+            try:
+                import certifi
+                ctx = ssl.create_default_context(cafile=certifi.where())
+            except ImportError:
+                ctx = ssl.create_default_context()
+            with urllib.request.urlopen(req, timeout=60, context=ctx) as resp:
                 total      = int(resp.headers.get("Content-Length", 0))
                 descargado = 0
                 with open(dest, "wb") as f:
@@ -400,7 +415,12 @@ rm -f "{ruta}"
 
         except Exception as e:
             # Si algo falla, abrir Downloads y mostrar instrucciones
-            subprocess.Popen(["open", _carpeta_downloads()])
+            subprocess.Popen(
+                ["open", _carpeta_downloads()],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
             self.status_lbl.setText(
                 "Descargado en Downloads.\n"
                 "1. Descomprime DentalApp-Mac.zip\n"

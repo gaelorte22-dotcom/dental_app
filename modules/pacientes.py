@@ -241,6 +241,8 @@ class PacientesWidget(QWidget):
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setMinimumSectionSize(80)
+        self.table.setSortingEnabled(True)
+        self.table.sortByColumn(0, Qt.SortOrder.AscendingOrder)  # orden por ID por defecto
         self.table.setColumnWidth(0, 50)
         self.table.setColumnWidth(1, 150)
         self.table.setColumnWidth(2, 150)
@@ -331,16 +333,17 @@ class PacientesWidget(QWidget):
         p = _get_pac(pid)
         if not p:
             return
-        # Buscar el ExpedientesWidget en el stack del padre
         parent = self.parent()
         while parent:
             if hasattr(parent, 'stack'):
-                # Cambiar al módulo de expedientes (índice 3)
                 parent._switch(3)
-                # Abrir directamente el expediente del paciente
-                exp_widget = parent.stack.widget(3)
-                if hasattr(exp_widget, 'mostrar_expediente'):
-                    exp_widget.mostrar_expediente(dict(p))
+                w = parent.stack.widget(3)
+                # Puede estar dentro de un QScrollArea
+                from PyQt6.QtWidgets import QScrollArea
+                if isinstance(w, QScrollArea):
+                    w = w.widget()
+                if w and hasattr(w, 'mostrar_expediente'):
+                    w.mostrar_expediente(dict(p))
                 break
             parent = parent.parent()
 

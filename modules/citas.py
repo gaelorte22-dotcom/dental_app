@@ -65,7 +65,9 @@ def obtener_citas(fecha: str = None, busqueda: str = "") -> list:
     conn = get_connection()
     cur = conn.cursor()
     query = """
-        SELECT c.*, p.nombre || ' ' || p.apellido AS paciente_nombre
+        SELECT c.*, 
+               p.nombre || ' ' || p.apellido AS paciente_nombre,
+               p.telefono AS paciente_telefono
         FROM citas c
         LEFT JOIN pacientes p ON c.paciente_id = p.id
         WHERE 1=1
@@ -429,15 +431,16 @@ class CitasWidget(QWidget):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(7)
+        self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels([
-            "Hora", "Paciente", "Motivo", "Duración", "Estado", "Notas", "Acciones"
+            "Hora", "Paciente", "Teléfono", "Motivo", "Duración", "Estado", "Notas", "Acciones"
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -498,18 +501,19 @@ class CitasWidget(QWidget):
         for row, c in enumerate(citas):
             hora      = c.get("hora", "")
             paciente  = c.get("paciente_nombre", "—")
+            telefono  = c.get("paciente_telefono", "") or "—"
             motivo    = c.get("motivo", "—")
             duracion  = f"{c.get('duracion', 30)} min"
             estado    = c.get("estado", "pendiente")
-            notas     = c.get("notas", "")
+            notas     = c.get("notas", "") or ""
 
-            for col, val in enumerate([hora, paciente, motivo, duracion, notas]):
+            for col, val in enumerate([hora, paciente, telefono, motivo, duracion, notas]):
                 item = QTableWidgetItem(val)
                 item.setData(Qt.ItemDataRole.UserRole, c["id"])
-                # col mapping: 0=hora,1=paciente,2=motivo,3=duracion,4=notas (estado is col 4 widget)
-                self.table.setItem(row, col if col < 4 else col + 1, item)
+                # col: 0=hora,1=paciente,2=tel,3=motivo,4=duracion,6=notas (5=estado widget)
+                self.table.setItem(row, col if col < 5 else col + 1, item)
 
-            # Estado badge widget
+            # Estado badge en columna 5
             color = ESTADO_COLORS.get(estado, MUTED)
             badge = QLabel(f"  {estado.capitalize()}  ")
             badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -525,7 +529,7 @@ class CitasWidget(QWidget):
             bl = QHBoxLayout(badge_cell)
             bl.setContentsMargins(4, 4, 4, 4)
             bl.addWidget(badge)
-            self.table.setCellWidget(row, 4, badge_cell)
+            self.table.setCellWidget(row, 5, badge_cell)
 
             # Action buttons
             cell = QWidget()
@@ -544,7 +548,7 @@ class CitasWidget(QWidget):
             del_btn.clicked.connect(lambda _, cid=c["id"]: self._eliminar(cid))
 
             hb.addWidget(edit_btn); hb.addWidget(del_btn)
-            self.table.setCellWidget(row, 6, cell)
+            self.table.setCellWidget(row, 7, cell)
 
         for r in range(self.table.rowCount()):
             self.table.setRowHeight(r, 44)

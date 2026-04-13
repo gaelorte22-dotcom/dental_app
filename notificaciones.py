@@ -74,10 +74,13 @@ def notificar_sistema(titulo: str, mensaje: str):
     # Mac — usar osascript
     if sys.platform == "darwin":
         try:
-            subprocess.Popen([
-                "osascript", "-e",
-                f'display notification "{mensaje}" with title "{titulo}"'
-            ])
+            subprocess.Popen(
+                ["osascript", "-e",
+                 f'display notification "{mensaje}" with title "{titulo}"'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True
+            )
             return True
         except Exception:
             pass

@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (
     QCheckBox, QDateEdit
 )
 from PyQt6.QtCore import Qt, QSize, pyqtSignal, QDate
-from PyQt6.QtGui import QFont, QBrush, QColor, QPixmap, QPainter, QPen
+from PyQt6.QtGui import QFont, QBrush, QColor
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from database.db_manager import get_connection, obtener_pacientes, obtener_paciente_por_id
@@ -262,14 +262,18 @@ DENTICION = {
     },
     "mixta": {
         "nombre": "👦 Mixta (7-12 años)",
-        "superior": [16,55,54,53,52,51,61,62,63,64,65,26],
-        "inferior": [46,85,84,83,82,81,71,72,73,74,75,36],
+        # Dientes temporales que pueden quedar
+        "superior": [55,54,53,52,51,61,62,63,64,65],
+        "inferior": [85,84,83,82,81,71,72,73,74,75],
+        # Dientes permanentes que ya erupcionaron
+        "superior_perm": [16,11,21,26],
+        "inferior_perm": [46,41,31,36],
     },
     "permanente": {
         "nombre": "🧑 Permanente (13+ años)",
-        # Sin muelas del juicio (18,28,38,48)
-        "superior": list(range(17,10,-1)) + list(range(21,28)),
-        "inferior": list(range(47,40,-1)) + list(range(31,38)),
+        # Incluye muelas del juicio (18,28,38,48)
+        "superior": list(range(18,10,-1)) + list(range(21,29)),
+        "inferior": list(range(48,40,-1)) + list(range(31,39)),
     },
 }
 
@@ -291,7 +295,7 @@ def calcular_tipo_denticion(fecha_nacimiento: str) -> str:
 
 # ── Odontograma widget ────────────────────────────────────────────────────────
 class OdontogramaWidget(QWidget):
-    changed = pyqtSignal(int, str)
+    changed = pyqtSignal(int, str, str)  # num, estado, notas
 
     def __init__(self, tipo="permanente", parent=None):
         super().__init__(parent)
@@ -350,7 +354,6 @@ class OdontogramaWidget(QWidget):
         self._render_dientes()
 
     def _render_dientes(self):
-        # Limpiar dientes anteriores
         while self._dientes_layout.count():
             item = self._dientes_layout.takeAt(0)
             if item.widget(): item.widget().deleteLater()
@@ -358,44 +361,39 @@ class OdontogramaWidget(QWidget):
 
         d = DENTICION[self._tipo]
 
-        # Superior
-        sup_lbl = QLabel("Superior")
-        sup_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sup_lbl.setStyleSheet(f"color:{MUTED}; font-size:11px; background:transparent;")
-        self._dientes_layout.addWidget(sup_lbl)
+        def _add_row(label_txt, numeros, color=None):
+            lbl = QLabel(label_txt)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            c = color or MUTED
+            lbl.setStyleSheet(f"color:{c}; font-size:11px; background:transparent; font-weight:600;")
+            self._dientes_layout.addWidget(lbl)
+            row = QHBoxLayout(); row.setSpacing(3); row.addStretch()
+            for n in numeros:
+                btn = ToothButton(n, str(n))
+                btn.clicked.connect(lambda _, num=n: self._on_click(num))
+                self._buttons[n] = btn
+                row.addWidget(btn)
+            row.addStretch()
+            self._dientes_layout.addLayout(row)
 
-        sup_row = QHBoxLayout()
-        sup_row.setSpacing(3)
-        sup_row.addStretch()
-        for n in d["superior"]:
-            btn = ToothButton(n, str(n))
-            btn.clicked.connect(lambda _, num=n: self._on_click(num))
-            self._buttons[n] = btn
-            sup_row.addWidget(btn)
-        sup_row.addStretch()
-        self._dientes_layout.addLayout(sup_row)
+        def _sep(color=BORDER):
+            sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
+            sep.setStyleSheet(f"background:{color};"); sep.setFixedHeight(1)
+            self._dientes_layout.addWidget(sep)
 
-        # Separador
-        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"background:{BORDER};"); sep.setFixedHeight(1)
-        self._dientes_layout.addWidget(sep)
-
-        # Inferior
-        inf_row = QHBoxLayout()
-        inf_row.setSpacing(3)
-        inf_row.addStretch()
-        for n in d["inferior"]:
-            btn = ToothButton(n, str(n))
-            btn.clicked.connect(lambda _, num=n: self._on_click(num))
-            self._buttons[n] = btn
-            inf_row.addWidget(btn)
-        inf_row.addStretch()
-        self._dientes_layout.addLayout(inf_row)
-
-        inf_lbl = QLabel("Inferior")
-        inf_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        inf_lbl.setStyleSheet(f"color:{MUTED}; font-size:11px; background:transparent;")
-        self._dientes_layout.addWidget(inf_lbl)
+        if self._tipo == "mixta":
+            # Mostrar permanentes que ya erupcionaron arriba
+            _add_row("Permanentes erupcionados (Superior)", d["superior_perm"], PRIMARY)
+            _sep(PRIMARY)
+            _add_row("Temporales (Superior)", d["superior"])
+            _sep()
+            _add_row("Temporales (Inferior)", d["inferior"])
+            _sep(PRIMARY)
+            _add_row("Permanentes erupcionados (Inferior)", d["inferior_perm"], PRIMARY)
+        else:
+            _add_row("Superior", d["superior"])
+            _sep()
+            _add_row("Inferior", d["inferior"])
 
     def _cambiar_tipo(self, idx):
         self._tipo = self._tipo_combo.currentData()
@@ -423,12 +421,7 @@ class OdontogramaWidget(QWidget):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._buttons[num].set_estado(dlg.estado)
             self._buttons[num].setToolTip(f"Diente {num}: {dlg.estado.capitalize()}\n{dlg.notas}")
-            self.changed.emit(num, dlg.estado)
-            self._last_notas = dlg.notas
-            self._last_num   = num
-
-    def get_last_notas(self):
-        return getattr(self, "_last_notas", "")
+            self.changed.emit(num, dlg.estado, dlg.notas)
 
 
 # ── Diente dialog ─────────────────────────────────────────────────────────────
@@ -891,8 +884,18 @@ class ExpedienteWidget(QWidget):
             rows = [r for r in rows if busqueda in (r.get("tratamiento","") or "").lower()
                     or busqueda in (r.get("descripcion","") or "").lower()]
 
-        total = sum(r.get("costo",0) for r in rows)
-        self.hist_stats.setText(f"{len(rows)} tratamiento(s)  |  Total: ${total:,.2f}")
+        # Solo sumar los tratamientos ya realizados
+        realizados  = [r for r in rows if r.get("estado") == "realizado"]
+        pendientes  = [r for r in rows if r.get("estado") == "pendiente"]
+        en_proceso  = [r for r in rows if r.get("estado") == "en_proceso"]
+        total_real  = sum(r.get("costo",0) for r in realizados)
+        total_plan  = sum(r.get("costo",0) for r in pendientes + en_proceso)
+
+        self.hist_stats.setText(
+            f"{len(rows)} tratamiento(s)  |  "
+            f"✅ Realizados: ${total_real:,.2f}  |  "
+            f"📋 Plan pendiente: ${total_plan:,.2f}"
+        )
 
         self.hist_table.setRowCount(len(rows))
         estado_colors = {"realizado": SUCCESS, "pendiente": WARNING, "en_proceso": SECONDARY}
@@ -966,8 +969,7 @@ class ExpedienteWidget(QWidget):
         lay.addStretch()
         return w
 
-    def _on_diente_changed(self, num, estado):
-        notas = self.odontograma.get_last_notas()
+    def _on_diente_changed(self, num, estado, notas):
         set_diente(self.paciente["id"], num, estado, notas)
 
     # ── TAB: Datos Médicos ────────────────────────────────────────────────────
@@ -1077,13 +1079,136 @@ class ExpedienteWidget(QWidget):
                 self.recetas_table.setItem(i, col, QTableWidgetItem(val))
 
             cell = QWidget(); cell.setStyleSheet("background:transparent;")
-            hb = QHBoxLayout(cell); hb.setContentsMargins(4,2,4,2)
+            hb = QHBoxLayout(cell); hb.setContentsMargins(4,2,4,2); hb.setSpacing(4)
+            imp_btn = _btn("🖨️", PRIMARY, SECONDARY)
+            imp_btn.setFixedSize(34, 28)
+            imp_btn.setToolTip("Imprimir receta")
+            imp_btn.clicked.connect(lambda _, rec=r: self._imprimir_receta(rec))
             del_btn = _btn("🗑", DANGER, "#C0392B")
             del_btn.setFixedSize(34, 28)
             del_btn.clicked.connect(lambda _, rid=r["id"]: self._eliminar_receta(rid))
-            hb.addWidget(del_btn)
+            hb.addWidget(imp_btn); hb.addWidget(del_btn)
             self.recetas_table.setCellWidget(i, 4, cell)
             self.recetas_table.setRowHeight(i, 40)
+
+    def _imprimir_receta(self, receta: dict):
+        """Genera un PDF de la receta y lo abre para imprimir."""
+        import tempfile, subprocess, sys
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.units import cm
+        from reportlab.pdfgen import canvas as rl_canvas
+
+        pac = self.paciente
+        nombre_pac = f"{pac.get('nombre','')} {pac.get('apellido','')}".strip()
+        fecha      = receta.get("fecha","")[:10]
+        dentista   = receta.get("dentista","") or ""
+        meds       = receta.get("medicamentos","") or ""
+        inds       = receta.get("indicaciones","") or ""
+
+        # Generar PDF en archivo temporal
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp.close()
+        path = tmp.name
+
+        c = rl_canvas.Canvas(path, pagesize=letter)
+        w_page, h_page = letter
+
+        # Borde de la receta
+        c.setStrokeColorRGB(0.1, 0.42, 0.54)
+        c.setLineWidth(2)
+        c.rect(1.5*cm, 2*cm, w_page - 3*cm, h_page - 4*cm)
+
+        # Encabezado
+        c.setFillColorRGB(0.1, 0.42, 0.54)
+        c.rect(1.5*cm, h_page - 4*cm, w_page - 3*cm, 2*cm, fill=1, stroke=0)
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont("Helvetica-Bold", 18)
+        c.drawCentredString(w_page/2, h_page - 2.8*cm, "RECETA MÉDICA")
+        c.setFont("Helvetica", 10)
+        c.drawCentredString(w_page/2, h_page - 3.5*cm, "DentalApp — Sistema de Gestión Odontológica")
+
+        # Datos del paciente
+        c.setFillColorRGB(0.17, 0.24, 0.31)
+        y = h_page - 5.5*cm
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(2.5*cm, y, "Paciente:")
+        c.setFont("Helvetica", 11)
+        c.drawString(6*cm, y, nombre_pac)
+
+        y -= 0.8*cm
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(2.5*cm, y, "Fecha:")
+        c.setFont("Helvetica", 11)
+        c.drawString(6*cm, y, fecha)
+
+        if dentista:
+            y -= 0.8*cm
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(2.5*cm, y, "Dentista:")
+            c.setFont("Helvetica", 11)
+            c.drawString(6*cm, y, dentista)
+
+        # Separador
+        y -= 1*cm
+        c.setStrokeColorRGB(0.1, 0.42, 0.54)
+        c.setLineWidth(0.5)
+        c.line(2.5*cm, y, w_page - 2.5*cm, y)
+
+        # Medicamentos
+        y -= 1*cm
+        c.setFont("Helvetica-Bold", 12)
+        c.setFillColorRGB(0.1, 0.42, 0.54)
+        c.drawString(2.5*cm, y, "Rx  Medicamentos:")
+        c.setFont("Helvetica", 11)
+        c.setFillColorRGB(0.17, 0.24, 0.31)
+        y -= 0.6*cm
+        for linea in meds.split("\n"):
+            if linea.strip():
+                c.drawString(3*cm, y, linea.strip()[:90])
+                y -= 0.6*cm
+
+        # Indicaciones
+        y -= 0.5*cm
+        c.setFont("Helvetica-Bold", 12)
+        c.setFillColorRGB(0.1, 0.42, 0.54)
+        c.drawString(2.5*cm, y, "Indicaciones:")
+        c.setFont("Helvetica", 11)
+        c.setFillColorRGB(0.17, 0.24, 0.31)
+        y -= 0.6*cm
+        for linea in inds.split("\n"):
+            if linea.strip():
+                c.drawString(3*cm, y, linea.strip()[:90])
+                y -= 0.6*cm
+
+        # Firma
+        y = 4.5*cm
+        c.setStrokeColorRGB(0.17, 0.24, 0.31)
+        c.line(w_page/2 + 1*cm, y, w_page - 3*cm, y)
+        c.setFont("Helvetica", 10)
+        c.setFillColorRGB(0.5, 0.5, 0.5)
+        c.drawCentredString(w_page * 0.75, y - 0.5*cm, "Firma del Dentista")
+
+        c.save()
+
+        # Abrir para imprimir
+        try:
+            if sys.platform == "win32":
+                os.startfile(path, "print")
+            elif sys.platform == "darwin":
+                subprocess.Popen(
+                    ["open", "-a", "Preview", path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
+            else:
+                subprocess.Popen(["xdg-open", path],
+                                 stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+        except Exception as e:
+            m = QMessageBox(self); m.setWindowTitle("Error")
+            m.setText(f"No se pudo abrir el PDF:\n{str(e)}")
+            m.setStyleSheet("color:black; background:white;"); m.exec()
 
     def _nueva_receta(self):
         dlg = RecetaDialog(self)
@@ -1169,17 +1294,37 @@ class ExpedienteWidget(QWidget):
             self._load_archivos()
 
     def _abrir_archivo(self, ruta):
-        if os.path.exists(ruta):
+        if not os.path.exists(ruta):
+            m = QMessageBox(self)
+            m.setWindowTitle("Error")
+            m.setText("Archivo no encontrado.")
+            m.setStyleSheet("color:black; background:white;")
+            m.exec()
+            return
+        try:
             import subprocess, sys
             if sys.platform == "win32":
                 os.startfile(ruta)
             elif sys.platform == "darwin":
-                subprocess.Popen(["open", ruta])
+                subprocess.Popen(
+                    ["open", ruta],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
             else:
-                subprocess.Popen(["xdg-open", ruta])
-        else:
-            m = QMessageBox(self); m.setWindowTitle("Error")
-            m.setText("Archivo no encontrado."); m.setStyleSheet("color:black; background:white;"); m.exec()
+                subprocess.Popen(
+                    ["xdg-open", ruta],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
+        except Exception as e:
+            m = QMessageBox(self)
+            m.setWindowTitle("Error")
+            m.setText(f"No se pudo abrir el archivo:\n{str(e)}")
+            m.setStyleSheet("color:black; background:white;")
+            m.exec()
 
     def _eliminar_archivo(self, aid, ruta):
         m = QMessageBox(self); m.setWindowTitle("Confirmar")
@@ -1366,10 +1511,12 @@ class ExpedientesWidget(QWidget):
         if self._expediente_widget:
             self._stack_layout.removeWidget(self._expediente_widget)
             self._expediente_widget.deleteLater()
+            self._expediente_widget = None
 
         self._lista_widget.setVisible(False)
         self._expediente_widget = ExpedienteWidget(paciente, self)
         self._stack_layout.addWidget(self._expediente_widget)
+        self._expediente_widget.setVisible(True)
 
     def mostrar_lista(self):
         if self._expediente_widget:
