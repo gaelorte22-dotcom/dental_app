@@ -1,1 +1,1 @@
-Parche para algunas fallas enfocado a usuarios Mac 
+Mejoras y correcciones generales. 
